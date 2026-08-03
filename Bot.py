@@ -1152,13 +1152,12 @@ async def check_schedule(app):
         await asyncio.sleep(10)
 
 # ============ main ============
-
-def main():
+async def main():
     print("📌 Entering main()...")
     app = Application.builder().token(TOKEN).build()
     
     try:
-        app.bot.delete_webhook(drop_pending_updates=True)
+        await app.bot.delete_webhook(drop_pending_updates=True)
         print("📌 Webhook cleared...")
     except Exception as e:
         print(f"⚠️ Webhook clear warning: {e}")
@@ -1194,29 +1193,24 @@ def main():
     
     print("📌 All handlers added...")
     
-    # ✅ 创建事件循环并启动后台任务
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    # 启动 check_schedule 任务
-    schedule_task = loop.create_task(check_schedule(app))
+    # ✅ 创建后台任务
+    schedule_task = asyncio.create_task(check_schedule(app))
     
     print("🤖 Advanced Bot started.")
     print("📊 Loaded commands. Owner-only functions active.")
     
     try:
-        app.run_polling()
+        await app.run_polling()
     except KeyboardInterrupt:
         print("🛑 Bot stopped by user")
     finally:
-        # ✅ 优雅地取消后台任务
+        # ✅ 取消后台任务
         schedule_task.cancel()
         try:
-            loop.run_until_complete(schedule_task)
+            await schedule_task
         except asyncio.CancelledError:
             pass
-        loop.close()
 
 if __name__ == "__main__":
     print("🔵 Script started...")
-    main()
+    asyncio.run(main())
