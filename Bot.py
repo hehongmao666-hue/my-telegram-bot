@@ -1194,13 +1194,28 @@ def main():
     
     print("📌 All handlers added...")
     
+    # ✅ 创建事件循环并启动后台任务
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.create_task(check_schedule(app))
+    
+    # 启动 check_schedule 任务
+    schedule_task = loop.create_task(check_schedule(app))
     
     print("🤖 Advanced Bot started.")
     print("📊 Loaded commands. Owner-only functions active.")
-    app.run_polling()
+    
+    try:
+        app.run_polling()
+    except KeyboardInterrupt:
+        print("🛑 Bot stopped by user")
+    finally:
+        # ✅ 优雅地取消后台任务
+        schedule_task.cancel()
+        try:
+            loop.run_until_complete(schedule_task)
+        except asyncio.CancelledError:
+            pass
+        loop.close()
 
 if __name__ == "__main__":
     print("🔵 Script started...")
