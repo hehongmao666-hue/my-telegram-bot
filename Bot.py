@@ -8,9 +8,16 @@ import re
 import random
 from datetime import datetime
 import logging
+from dotenv import load_dotenv
 
-TOKEN = os.environ.get("BOT_TOKEN", "8537243856:AAEUBfd16LDpSgqhPeun1D5JHyleHuF2ETI")
-OWNER_ID = 5300063761
+# ============ 加载环境变量 ============
+load_dotenv()
+
+TOKEN = os.environ.get("BOT_TOKEN")
+if not TOKEN:
+    raise ValueError("BOT_TOKEN environment variable is not set!")
+
+OWNER_ID = int(os.environ.get("OWNER_ID", 5300063761))
 
 DATA_FILE = "data.json"
 SCHEDULE_FILE = "schedule.json"
