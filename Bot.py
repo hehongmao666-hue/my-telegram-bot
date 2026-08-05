@@ -664,6 +664,82 @@ def get_player_state(user_id):
 def is_game_owner(user_id, owner_id):
     return str(user_id) == str(owner_id)
 
+# ============ RPG 游戏配置 ============
+
+MAX_HP = 100
+MAX_ENERGY = 50
+
+ENEMY_TEMPLATES = [
+    {"name": "🐺 ဝံပုလွေ", "hp": 20, "attack": 5, "defense": 2, "reward": 10, "exp": 5},
+    {"name": "🐻 ဝက်ဝံ", "hp": 35, "attack": 8, "defense": 3, "reward": 15, "exp": 8},
+    {"name": "🐉 နဂါးငယ်", "hp": 50, "attack": 12, "defense": 5, "reward": 25, "exp": 12},
+    {"name": "🧙 မှော်ဆရာ", "hp": 30, "attack": 15, "defense": 1, "reward": 20, "exp": 10},
+    {"name": "⚔️ သူရဲကောင်း", "hp": 45, "attack": 10, "defense": 8, "reward": 30, "exp": 15},
+    {"name": "👹 နတ်ဆိုး", "hp": 60, "attack": 18, "defense": 6, "reward": 40, "exp": 20},
+    {"name": "🐍 မြွေကြီး", "hp": 40, "attack": 14, "defense": 4, "reward": 22, "exp": 11},
+    {"name": "🦅 လင်းယုန်မင်း", "hp": 55, "attack": 16, "defense": 5, "reward": 35, "exp": 18},
+    {"name": "👑 မှောင်မိုက်မင်း", "hp": 80, "attack": 22, "defense": 10, "reward": 60, "exp": 30},
+    {"name": "🐲 နဂါးမင်း", "hp": 100, "attack": 25, "defense": 12, "reward": 80, "exp": 40},
+]
+
+WEAPON_TEMPLATES = [
+    {"name": "🗡️ သံဓား", "attack": 3, "price": 10},
+    {"name": "⚔️ ငွေဓား", "attack": 6, "price": 25},
+    {"name": "🗡️ ရွှေဓား", "attack": 10, "price": 50},
+    {"name": "⚔️ မှော်ဓား", "attack": 15, "price": 100},
+    {"name": "⚔️ ဒဏ္ဍာရီဓား", "attack": 25, "price": 250},
+]
+
+ARMOR_TEMPLATES = [
+    {"name": "🛡️ သားရေဒိုင်း", "defense": 3, "price": 10},
+    {"name": "🛡️ သံဒိုင်း", "defense": 6, "price": 25},
+    {"name": "🛡️ ငွေဒိုင်း", "defense": 10, "price": 50},
+    {"name": "🛡️ မှော်ဒိုင်း", "defense": 15, "price": 100},
+    {"name": "🛡️ ဒဏ္ဍာရီဒိုင်း", "defense": 25, "price": 250},
+]
+
+POTION_TEMPLATES = [
+    {"name": "🧪 သေးငယ်သောဆေး", "heal": 20, "price": 5},
+    {"name": "🧪 ပုံမှန်ဆေး", "heal": 40, "price": 15},
+    {"name": "🧪 ကြီးမားသောဆေး", "heal": 70, "price": 30},
+    {"name": "🧪 အသက်ဆေး", "heal": 100, "price": 50},
+]
+
+ACHIEVEMENTS = {
+    5: "🌟 ခရီးသည်",
+    10: "⚔️ စစ်သည်တော်",
+    15: "🔥 သူရဲကောင်း",
+    20: "⭐ ဒဏ္ဍာရီ",
+    25: "👑 မင်းသား",
+    30: "🏆 ချန်ပီယံ",
+}
+
+def generate_enemy(level):
+    base = random.choice(ENEMY_TEMPLATES)
+    multiplier = 1 + (level - 1) * 0.25
+    return {
+        "name": base["name"],
+        "hp": int(base["hp"] * multiplier),
+        "max_hp": int(base["hp"] * multiplier),
+        "attack": int(base["attack"] * multiplier),
+        "defense": int(base["defense"] * multiplier),
+        "reward": int(base["reward"] * multiplier),
+        "exp": int(base["exp"] * multiplier),
+        "level": level
+    }
+
+def generate_shop_items(level):
+    items = []
+    for w in WEAPON_TEMPLATES:
+        if level >= 3 or w["price"] <= 25:
+            items.append({"type": "weapon", **w})
+    for a in ARMOR_TEMPLATES:
+        if level >= 3 or a["price"] <= 25:
+            items.append({"type": "armor", **a})
+    for p in POTION_TEMPLATES:
+        items.append({"type": "potion", **p})
+    return items
+
 LEVELS = {
     1: {"name": "🌲 မြူခိုးတော", "desc": "မြူခိုးတောအုပ်ထဲမှာ လမ်းပျောက်နေတယ်။ ထွက်ပေါက်ကိုရှာပါ။"},
     2: {"name": "🏔️ နှင်းတောင်", "desc": "နှင်းတောင်ထိပ်ကိုတက်ပြီး အလံကိုစိုက်ပါ။"},
@@ -730,7 +806,20 @@ def get_or_create_player(user_id):
             "max_level": 1,
             "is_playing": False,
             "owner_id": user_id,
-            "current_scene": "level_1_start"
+            "current_scene": "level_1_start",
+            "hp": MAX_HP,
+            "max_hp": MAX_HP,
+            "energy": MAX_ENERGY,
+            "max_energy": MAX_ENERGY,
+            "gold": 20,
+            "attack": 3,
+            "defense": 1,
+            "exp": 0,
+            "exp_to_next": 10,
+            "weapon": None,
+            "armor": None,
+            "potions": [],
+            "achievements": []
         }
         save_game_states(states)
     return states[user_id]
@@ -743,8 +832,34 @@ def reset_player_game(user_id):
     states[user_id]["level"] = 1
     states[user_id]["is_playing"] = True
     states[user_id]["current_scene"] = "level_1_start"
+    states[user_id]["hp"] = states[user_id].get("max_hp", MAX_HP)
+    states[user_id]["energy"] = states[user_id].get("max_energy", MAX_ENERGY)
+    states[user_id]["gold"] = states[user_id].get("gold", 20)
+    states[user_id]["potions"] = []
     save_game_states(states)
     return states[user_id]
+
+def add_exp(user_id, exp):
+    states = load_game_states()
+    if user_id not in states:
+        return
+    states[user_id]["exp"] += exp
+    exp_to_next = states[user_id].get("exp_to_next", 10)
+    level = states[user_id].get("level", 1)
+    while states[user_id]["exp"] >= exp_to_next:
+        states[user_id]["exp"] -= exp_to_next
+        states[user_id]["level"] += 1
+        level = states[user_id]["level"]
+        states[user_id]["exp_to_next"] = int(exp_to_next * 1.5)
+        states[user_id]["max_hp"] += 10
+        states[user_id]["hp"] = states[user_id]["max_hp"]
+        states[user_id]["attack"] += 2
+        states[user_id]["defense"] += 1
+        for achieve_level, title in ACHIEVEMENTS.items():
+            if level >= achieve_level and title not in states[user_id].get("achievements", []):
+                states[user_id]["achievements"].append(title)
+        exp_to_next = states[user_id]["exp_to_next"]
+    save_game_states(states)
 
 def mark_level_complete(user_id, level):
     states = load_game_states()
@@ -1014,6 +1129,171 @@ async def game_back(update, context):
     await update.message.reply_text("🔙 နောက်တစ်ဆင့်ကိုပြန်သွားပါပြီ။")
     await render_scene(update.message, context, start_scene, user_id)
 
+# ===== 状态面板 =====
+
+async def game_status(update, context):
+    user_id = str(update.effective_user.id)
+    state = get_player_state(user_id)
+    if not state:
+        await update.message.reply_text("❌ မင်းမှာ ဂိမ်းမရှိပါ။ /game နဲ့စပါ။")
+        return
+    player_name = state.get("name", "စွန့်စားသူ")
+    level = state.get("level", 1)
+    max_level = state.get("max_level", 1)
+    hp = state.get("hp", MAX_HP)
+    max_hp = state.get("max_hp", MAX_HP)
+    energy = state.get("energy", MAX_ENERGY)
+    max_energy = state.get("max_energy", MAX_ENERGY)
+    gold = state.get("gold", 0)
+    attack = state.get("attack", 3)
+    defense = state.get("defense", 1)
+    exp = state.get("exp", 0)
+    exp_to_next = state.get("exp_to_next", 10)
+    weapon = state.get("weapon")
+    armor = state.get("armor")
+    potions = state.get("potions", [])
+    achievements = state.get("achievements", [])
+    weapon_bonus = weapon.get("attack", 0) if weapon else 0
+    armor_bonus = armor.get("defense", 0) if armor else 0
+    total_attack = attack + weapon_bonus
+    total_defense = defense + armor_bonus
+    weapon_text = f"{weapon['name']} (+{weapon_bonus})" if weapon else "❌ မရှိ"
+    armor_text = f"{armor['name']} (+{armor_bonus})" if armor else "❌ မရှိ"
+    potion_text = f"{len(potions)} လုံး" if potions else "❌ မရှိ"
+    achievement_text = ", ".join(achievements) if achievements else "❌ မရှိသေး"
+    title = get_level_title(max_level)
+    level_emoji = get_level_emoji(level)
+    
+    def progress_bar(current, total, length=12):
+        if total <= 0:
+            return "█" * length
+        filled = int((current / total) * length)
+        filled = min(filled, length)
+        empty = length - filled
+        return "█" * filled + "░" * empty
+    
+    hp_bar = progress_bar(hp, max_hp, 12)
+    hp_percent = int((hp / max_hp) * 100) if max_hp > 0 else 0
+    energy_bar = progress_bar(energy, max_energy, 12)
+    energy_percent = int((energy / max_energy) * 100) if max_energy > 0 else 0
+    exp_bar = progress_bar(exp, exp_to_next, 12)
+    exp_percent = int((exp / exp_to_next) * 100) if exp_to_next > 0 else 0
+    
+    status_text = f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    status_text += f"👤 *{player_name}*\n"
+    status_text += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    status_text += f"{level_emoji} *အဆင့် {level}* | {title}\n"
+    status_text += f"🏆 အမြင့်ဆုံး: {max_level}\n"
+    status_text += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    status_text += f"\n❤️ *HP*    {hp_bar}  {hp}/{max_hp} ({hp_percent}%)\n"
+    status_text += f"⚡ *Energy* {energy_bar}  {energy}/{max_energy} ({energy_percent}%)\n"
+    status_text += f"⭐ *Exp*   {exp_bar}  {exp}/{exp_to_next} ({exp_percent}%)\n"
+    status_text += f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    status_text += f"💰 *ရွှေ:* {gold}\n"
+    status_text += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    status_text += f"⚔️ *တိုက်ခိုက်အား:* {total_attack} (ကိုယ်ပိုင် {attack} + လက်နက် {weapon_bonus})\n"
+    status_text += f"🛡️ *ကာကွယ်အား:* {total_defense} (ကိုယ်ပိုင် {defense} + ဒိုင်း {armor_bonus})\n"
+    status_text += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    status_text += f"🗡️ *လက်နက်:* {weapon_text}\n"
+    status_text += f"🛡️ *ဒိုင်း:* {armor_text}\n"
+    status_text += f"🧪 *ဆေး:* {potion_text}\n"
+    status_text += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    status_text += f"🏅 *အောင်မြင်မှုများ:* {achievement_text}\n"
+    status_text += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    
+    keyboard = [
+        [InlineKeyboardButton("🏪 ဈေးဆိုင်", callback_data="shop_open")],
+        [InlineKeyboardButton("🔙 ဂိမ်းသို့ပြန်ရန်", callback_data="back_to_game")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(status_text, parse_mode="Markdown", reply_markup=reply_markup)
+
+
+# ===== 商店系统 =====
+
+async def game_shop(update, context):
+    user_id = str(update.effective_user.id)
+    state = get_player_state(user_id)
+    if not state:
+        await update.message.reply_text("❌ မင်းမှာ ဂိမ်းမရှိပါ။ /game နဲ့စပါ။")
+        return
+    level = state.get("level", 1)
+    gold = state.get("gold", 0)
+    items = generate_shop_items(level)
+    text = f"🏪 *ဈေးဆိုင်*\n\n💰 မင်းရဲ့ရွှေ: {gold}\n\n📦 *ပစ္စည်းများ:*\n"
+    keyboard = []
+    for i, item in enumerate(items[:6]):
+        price = item["price"]
+        if item["type"] == "weapon":
+            text += f"{i+1}. {item['name']} ⚔️+{item['attack']} 💰{price}\n"
+        elif item["type"] == "armor":
+            text += f"{i+1}. {item['name']} 🛡️+{item['defense']} 💰{price}\n"
+        else:
+            text += f"{i+1}. {item['name']} ❤️+{item['heal']} 💰{price}\n"
+        keyboard.append([InlineKeyboardButton(f"🛒 {item['name']} ({price}💰)", callback_data=f"shop_buy_{i}_{user_id}")])
+    keyboard.append([InlineKeyboardButton("🔙 ဂိမ်းသို့ပြန်ရန်", callback_data="back_to_game")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    context.user_data["shop_items"] = items
+    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
+
+
+# ===== 商店回调 =====
+
+async def shop_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    user_id = str(query.from_user.id)
+    data = query.data
+    chat_id = query.message.chat.id
+    if data == "shop_open":
+        await game_shop(update, context)
+        return
+    if data == "back_to_game":
+        state = get_player_state(user_id)
+        if state:
+            current_scene = state.get("current_scene", "level_1_start")
+            await render_scene_with_send(context, chat_id, current_scene, user_id)
+        return
+    if data.startswith("shop_buy_"):
+        parts = data.split("_")
+        if len(parts) >= 3:
+            try:
+                item_index = int(parts[2])
+                owner_id = parts[3] if len(parts) > 3 else user_id
+                if not is_game_owner(user_id, owner_id):
+                    await query.answer("⛔️ ဒီဂိမ်းက မင်းရဲ့မဟုတ်ဘူး!", show_alert=True)
+                    return
+                items = context.user_data.get("shop_items", [])
+                if item_index >= len(items):
+                    await query.answer("❌ ပစ္စည်းမရှိတော့ပါ။", show_alert=True)
+                    return
+                item = items[item_index]
+                price = item["price"]
+                states = load_game_states()
+                if user_id not in states:
+                    await query.answer("❌ ဂိမ်းမစရသေးပါ။", show_alert=True)
+                    return
+                if states[user_id].get("gold", 0) < price:
+                    await query.answer("💰 ရွှေမလုံလောက်ပါ!", show_alert=True)
+                    return
+                states[user_id]["gold"] -= price
+                if item["type"] == "weapon":
+                    states[user_id]["weapon"] = {"name": item["name"], "attack": item["attack"]}
+                    msg = f"✅ {item['name']} ကိုဝယ်ယူပြီးပါပြီ! ⚔️+{item['attack']}"
+                elif item["type"] == "armor":
+                    states[user_id]["armor"] = {"name": item["name"], "defense": item["defense"]}
+                    msg = f"✅ {item['name']} ကိုဝယ်ယူပြီးပါပြီ! 🛡️+{item['defense']}"
+                else:
+                    potions = states[user_id].get("potions", [])
+                    potions.append({"name": item["name"], "heal": item["heal"]})
+                    states[user_id]["potions"] = potions
+                    msg = f"✅ {item['name']} ကိုဝယ်ယူပြီးပါပြီ! ❤️+{item['heal']}"
+                save_game_states(states)
+                await query.answer(msg, show_alert=True)
+                await game_shop(update, context)
+            except Exception as e:
+                await query.answer(f"❌ အမှားရှိသည်: {e}", show_alert=True)
+
 async def game_callback(update, context):
     query = update.callback_query
     
@@ -1185,11 +1465,16 @@ def main():
     app.add_handler(CommandHandler("game", game_start))
     app.add_handler(CommandHandler("restartgame", game_restart))
     app.add_handler(CommandHandler("back", game_back))
+    app.add_handler(CommandHandler("status", game_status))
+    app.add_handler(CommandHandler("shop", game_shop))
     app.add_handler(CallbackQueryHandler(random_link_callback, pattern="^random_link$"))
     app.add_handler(CallbackQueryHandler(back_to_menu_callback, pattern="^back_to_menu$"))
     app.add_handler(CallbackQueryHandler(game_callback, pattern="^game_"))
     app.add_handler(CallbackQueryHandler(game_callback, pattern="^restart_"))
     app.add_handler(CallbackQueryHandler(game_callback, pattern="^level_"))
+    app.add_handler(CallbackQueryHandler(shop_callback, pattern="^shop_"))
+    app.add_handler(CallbackQueryHandler(shop_callback, pattern="^back_to_game$"))
+    app.add_handler(CallbackQueryHandler(shop_callback, pattern="^shop_open$"))
     
     print("📌 All handlers added...")
     
