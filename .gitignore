@@ -2,3 +2,7 @@ logs/
 .env
 .env.txt.env 
 .env.txt 
+data.json 
+game_states.json 
+schedule.json 
+presets.json 
