@@ -23,6 +23,13 @@ DATA_FILE = "data.json"
 SCHEDULE_FILE = "schedule.json"
 PRESET_FILE = "presets.json"
 
+# ============ 管理员配置 ============
+# 在这里添加允许使用 /announce 的管理员 ID
+ADMIN_IDS = [
+    5300063761,  # Owner
+    1062259560,  # Admin 1
+]
+
 # ============ 日志系统 ============
 
 LOG_DIR = "logs"
@@ -81,8 +88,12 @@ def get_user_info_from_query(query):
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {"users": [], "groups": [], "blacklist": []}
+            data = json.load(f)
+            # ✅ 确保 subscribers 字段存在
+            if "subscribers" not in data:
+                data["subscribers"] = []
+            return data
+    return {"users": [], "groups": [], "blacklist": [], "subscribers": []}
 
 def save_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -592,6 +603,132 @@ async def forward_all(update, context):
         f"မအောင်မြင်: {failed}\n"
         f"စုစုပေါင်း: {len(targets)}"
     )
+
+# ============ @所有人 公告功能 ============
+
+async def announce(update, context):
+    """在群里 @所有人 发送公告（仅 Owner 和指定管理员）"""
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+    
+    # 检查是否有权限
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔️ သင့်တွင် ဤ command ကိုသုံးခွင့်မရှိပါ။")
+        return
+    
+    # 检查是否在群组中使用
+    if update.effective_chat.type == "private":
+        await update.message.reply_text("❌ ဤ command ကို အုပ်စုများတွင်သာ သုံးနိုင်သည်။")
+        return
+    
+    # 获取公告内容
+    text = ' '.join(context.args)
+    if not text:
+        await update.message.reply_text(
+            "📝 *အသုံးပြုပုံ:* `/announce [စာသား]`\n\n"
+            "ဥပမာ: `/announce ဒီနေ့ အထူးလျှော့စျေး 30%!`\n\n"
+            "💡 HTML သုံးနိုင်သည်: `<b>လုံးထူ</b>` `<i>စောင်း</i>`",
+            parse_mode="Markdown"
+        )
+        return
+    
+    # 获取群组信息
+    try:
+        chat = await context.bot.get_chat(chat_id)
+        chat_title = chat.title or "အုပ်စု"
+    except Exception:
+        chat_title = "အုပ်စု"
+    
+    # 获取 Bot 是否为管理员（能否 @所有人）
+    try:
+        bot_member = await context.bot.get_chat_member(chat_id, context.bot.id)
+        can_mention = bot_member.status in ["administrator", "creator"]
+    except Exception:
+        can_mention = False
+    
+    # 构建公告消息
+    mention_text = ""
+    if can_mention:
+        mention_text = "@所有人\n\n"
+    
+    announcement = f"📢 *公告*\n"
+    announcement += f"━━━━━━━━━━━━━━━━\n\n"
+    announcement += f"{mention_text}{text}\n\n"
+    announcement += f"━━━━━━━━━━━━━━━━\n"
+    announcement += f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+    announcement += f"👤 {update.effective_user.first_name or 'Admin'}"
+    
+    # 添加按钮
+    keyboard = [
+        [InlineKeyboardButton("🔔 接收通知", callback_data="announce_subscribe")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    # 发送公告
+    try:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=announcement,
+            parse_mode="Markdown",
+            reply_markup=reply_markup
+        )
+        
+        # 如果 Bot 不是管理员，提示用户
+        if not can_mention:
+            await update.message.reply_text(
+                "ℹ️ Bot သည် Gpတွင် အက်ဒမင်မဟုတ်သောကြောင့် @အားလုံးကို မသုံးနိုင်ပါ။\n"
+                "ကျေးဇူးပြု၍ Bot ကို အက်ဒမင်အဖြစ်သတ်မှတ်ပါ။"
+            )
+        
+        # 记录日志
+        user_id_int, username = get_user_info(update)
+        log_action(user_id_int, username, "ANNOUNCE", f"公告: {text[:50]}... | 群组: {chat_title}")
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ ပို့ရာတွင် အမှားရှိသည်: {e}")
+
+async def announce_callback(update, context):
+    """公告按钮回调 - 只显示最新一条通知"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "announce_subscribe":
+        user = query.from_user
+        chat_id = query.message.chat.id
+        message_id = query.message.message_id
+        
+        # 获取当前订阅人数（存储到 data.json）
+        data = load_data()
+        subscribers = data.get("subscribers", [])
+        if user.id not in subscribers:
+            subscribers.append(user.id)
+            data["subscribers"] = subscribers
+            save_data(data)
+        
+        # 更新按钮文字
+        await query.edit_message_text(
+            f"✅ {user.first_name} သည် နောက်ထပ် အသိပေးချက်များ ရရှိမည်။",
+            parse_mode="Markdown"
+        )
+        
+        # ✅ 先尝试删除上一条通知消息（如果有）
+        try:
+            # 获取之前发送的通知消息ID
+            last_notification_id = context.user_data.get("last_notification_id")
+            if last_notification_id:
+                await context.bot.delete_message(chat_id=chat_id, message_id=last_notification_id)
+        except Exception:
+            pass
+        
+        # ✅ 发送新的通知消息
+        new_msg = await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"🔔 {user.mention_html()} သည် အသိပေးချက်ကို လက်ခံထားပြီး။ (စုစုပေါင်း {len(subscribers)} ယောက်)",
+            parse_mode="HTML"
+        )
+        
+        # ✅ 保存当前消息ID，下次点击时删除
+        context.user_data["last_notification_id"] = new_msg.message_id
 
 # ============ 随机链接 ============
 
@@ -1396,22 +1533,12 @@ async def game_status(update, context):
     user_id = str(update.effective_user.id)
     chat_id = update.effective_chat.id
     state = get_player_state(user_id)
+    
     if not state:
         await update.message.reply_text("❌ မင်းမှာ ဂိမ်းမရှိပါ။ /game နဲ့စပါ။")
         return
     
-    # ✅ 清理旧消息（保留最新2条）
     await clear_game_messages(context, user_id, chat_id, keep_last=2)
-    
-    # ... 状态面板代码 ...
-    
-    keyboard = [
-        [InlineKeyboardButton("🏪 ဈေးဆိုင်", callback_data="shop_open")],
-        [InlineKeyboardButton("🔙 ဂိမ်းသို့ပြန်ရန်", callback_data="back_to_game")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    msg = await update.message.reply_text(status_text, parse_mode="Markdown", reply_markup=reply_markup)
-    save_game_message(user_id, chat_id, msg.message_id)
     
     player_name = state.get("name", "စွန့်စားသူ")
     level = state.get("level", 1)
@@ -1458,6 +1585,7 @@ async def game_status(update, context):
     exp_bar = progress_bar(exp, exp_to_next, 12)
     exp_percent = int((exp / exp_to_next) * 100) if exp_to_next > 0 else 0
     
+    # ✅ 确保 status_text 始终被定义
     status_text = f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     status_text += f"👤 *{player_name}*\n"
     status_text += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -1486,7 +1614,8 @@ async def game_status(update, context):
         [InlineKeyboardButton("🔙 ဂိမ်းသို့ပြန်ရန်", callback_data="back_to_game")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(status_text, parse_mode="Markdown", reply_markup=reply_markup)
+    msg = await update.message.reply_text(status_text, parse_mode="Markdown", reply_markup=reply_markup)
+    save_game_message(user_id, chat_id, msg.message_id)
 
 # ===== 商店系统 =====
 
@@ -1792,6 +1921,7 @@ def main():
     app.add_handler(CommandHandler("back", game_back))
     app.add_handler(CommandHandler("status", game_status))
     app.add_handler(CommandHandler("shop", game_shop))
+    app.add_handler(CommandHandler("announce", announce))
     app.add_handler(CallbackQueryHandler(random_link_callback, pattern="^random_link$"))
     app.add_handler(CallbackQueryHandler(back_to_menu_callback, pattern="^back_to_menu$"))
     app.add_handler(CallbackQueryHandler(game_callback, pattern="^game_"))
@@ -1800,6 +1930,7 @@ def main():
     app.add_handler(CallbackQueryHandler(shop_callback, pattern="^shop_"))
     app.add_handler(CallbackQueryHandler(shop_callback, pattern="^back_to_game$"))
     app.add_handler(CallbackQueryHandler(shop_callback, pattern="^shop_open$"))
+    app.add_handler(CallbackQueryHandler(announce_callback, pattern="^announce_"))
     
     print("📌 All handlers added...")
     
