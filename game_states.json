@@ -13,13 +13,20 @@
   "6879624273": {
     "name": "ဝံပုလွေ ဌေး",
     "fixed_title": "ဒဏ္ဍာရီ842",
-    "level": 6,
+    "level": 1,
     "scene": "start",
     "history": [
       "start"
     ],
     "is_playing": true,
-    "owner_id": "6879624273"
+    "owner_id": "6879624273",
+    "game_messages": [],
+    "current_scene": "level_1_start",
+    "hp": 80,
+    "energy": 40,
+    "gold": 5,
+    "potions": [],
+    "deaths": 2
   },
   "5980592109": {
     "name": "မြေခွေး အေး",
@@ -408,4 +415,3 @@
     "is_playing": true,
     "owner_id": "8831734866"
   }
-}
