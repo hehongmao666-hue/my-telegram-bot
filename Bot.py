@@ -626,61 +626,57 @@ async def announce(update, context):
     if not text:
         await update.message.reply_text(
             "📝 *အသုံးပြုပုံ:* `/announce [စာသား]`\n\n"
-            "ဥပမာ: `/announce ဒီနေ့ အထူးလျှော့စျေး 30%!`\n\n"
-            "💡 HTML သုံးနိုင်သည်: `<b>လုံးထူ</b>` `<i>စောင်း</i>`",
+            "ဥပမာ: `/announce ဒီနေ့ အထူးလျှော့စျေး 30%!`",
             parse_mode="Markdown"
         )
         return
     
-    # 获取群组信息
     try:
         chat = await context.bot.get_chat(chat_id)
         chat_title = chat.title or "အုပ်စု"
     except Exception:
         chat_title = "အုပ်စု"
     
-    # 获取 Bot 是否为管理员（能否 @所有人）
     try:
         bot_member = await context.bot.get_chat_member(chat_id, context.bot.id)
         can_mention = bot_member.status in ["administrator", "creator"]
     except Exception:
         can_mention = False
     
-    # 构建公告消息
+    # ✅ 使用 Telegram 原生 @所有人 格式
     mention_text = ""
     if can_mention:
-        mention_text = "@所有人\n\n"
+        mention_text = '<a href="tg://mention?user=all">@all</a>\n\n'
     
-    announcement = f"📢 *公告*\n"
+    # ✅ 全部使用缅文
+    announcement = f"📢 *ကြေငြာ*\n"
     announcement += f"━━━━━━━━━━━━━━━━\n\n"
-    announcement += f"{mention_text}{text}\n\n"
+    if mention_text:
+        announcement += mention_text
+    announcement += f"{text}\n\n"
     announcement += f"━━━━━━━━━━━━━━━━\n"
     announcement += f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
     announcement += f"👤 {update.effective_user.first_name or 'Admin'}"
     
-    # 添加按钮
     keyboard = [
-        [InlineKeyboardButton("🔔 接收通知", callback_data="announce_subscribe")],
+        [InlineKeyboardButton("🔔 သတင်းရယူမည်", callback_data=f"announce_subscribe_{chat_id}_{int(time.time())}")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # 发送公告
     try:
         await context.bot.send_message(
             chat_id=chat_id,
             text=announcement,
-            parse_mode="Markdown",
+            parse_mode="HTML",
             reply_markup=reply_markup
         )
         
-        # 如果 Bot 不是管理员，提示用户
         if not can_mention:
             await update.message.reply_text(
-                "ℹ️ Bot သည် Gpတွင် အက်ဒမင်မဟုတ်သောကြောင့် @အားလုံးကို မသုံးနိုင်ပါ။\n"
+                "ℹ️ Bot သည် အုပ်စုတွင် အက်ဒမင်မဟုတ်သောကြောင့် @all ကို မသုံးနိုင်ပါ။\n"
                 "ကျေးဇူးပြု၍ Bot ကို အက်ဒမင်အဖြစ်သတ်မှတ်ပါ။"
             )
         
-        # 记录日志
         user_id_int, username = get_user_info(update)
         log_action(user_id_int, username, "ANNOUNCE", f"公告: {text[:50]}... | 群组: {chat_title}")
         
@@ -688,16 +684,15 @@ async def announce(update, context):
         await update.message.reply_text(f"❌ ပို့ရာတွင် အမှားရှိသည်: {e}")
 
 async def announce_callback(update, context):
-    """公告按钮回调 - 只显示最新一条通知"""
+    """公告按钮回调 - 支持多人点击，不删除原公告"""
     query = update.callback_query
     await query.answer()
     
-    if query.data == "announce_subscribe":
+    if query.data.startswith("announce_subscribe_"):
         user = query.from_user
         chat_id = query.message.chat.id
-        message_id = query.message.message_id
         
-        # 获取当前订阅人数（存储到 data.json）
+        # 获取当前订阅人数
         data = load_data()
         subscribers = data.get("subscribers", [])
         if user.id not in subscribers:
@@ -705,30 +700,15 @@ async def announce_callback(update, context):
             data["subscribers"] = subscribers
             save_data(data)
         
-        # 更新按钮文字
-        await query.edit_message_text(
-            f"✅ {user.first_name} သည် နောက်ထပ် အသိပေးချက်များ ရရှိမည်။",
-            parse_mode="Markdown"
-        )
-        
-        # ✅ 先尝试删除上一条通知消息（如果有）
-        try:
-            # 获取之前发送的通知消息ID
-            last_notification_id = context.user_data.get("last_notification_id")
-            if last_notification_id:
-                await context.bot.delete_message(chat_id=chat_id, message_id=last_notification_id)
-        except Exception:
-            pass
-        
-        # ✅ 发送新的通知消息
-        new_msg = await context.bot.send_message(
+        # ✅ 只在原公告下方发送一条通知（不修改原公告）
+        await context.bot.send_message(
             chat_id=chat_id,
             text=f"🔔 {user.mention_html()} သည် အသိပေးချက်ကို လက်ခံထားပြီး။ (စုစုပေါင်း {len(subscribers)} ယောက်)",
             parse_mode="HTML"
         )
         
-        # ✅ 保存当前消息ID，下次点击时删除
-        context.user_data["last_notification_id"] = new_msg.message_id
+        # ✅ 只提示用户，不修改按钮
+        await query.answer(f"✅ {user.first_name} အတွက် အောင်မြင်ပါပြီ။", show_alert=False)
 
 # ============ 随机链接 ============
 
@@ -1931,6 +1911,7 @@ def main():
     app.add_handler(CallbackQueryHandler(shop_callback, pattern="^back_to_game$"))
     app.add_handler(CallbackQueryHandler(shop_callback, pattern="^shop_open$"))
     app.add_handler(CallbackQueryHandler(announce_callback, pattern="^announce_"))
+    app.add_handler(CallbackQueryHandler(announce_callback, pattern="^announce_subscribe_"))
     
     print("📌 All handlers added...")
     
