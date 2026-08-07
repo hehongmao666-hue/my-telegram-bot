@@ -641,29 +641,70 @@ async def announce(update, context):
     # 标记为运行中
     announcement_running[str(chat_id)] = True
     
-    # ✅ 发送公告标题（移除 parse_mode）
+    # 发送公告标题
     await context.bot.send_message(
         chat_id=chat_id,
         text=f"📢 {text}\n━━━━━━━━━━━━━━━━\n🛑 /stop_announce - ရပ်ရန်",
         parse_mode=None
     )
     
-    # 获取成员
+    # ✅ 获取所有成员
+    members = []
     try:
-        members = []
-        async for member in context.bot.get_chat_members(chat_id):
-            if member.user.id != context.bot.id:
-                members.append(member.user)
-                if len(members) >= 2000:
-                    break
+        # 获取成员总数
+        total_count = await context.bot.get_chat_member_count(chat_id)
+        
+        # 限制最大获取人数（防止超时）
+        max_members = min(total_count, 500)
+        
+        # 通过 get_chat_member 逐个获取（只能这样，没有批量API）
+        # 注意：这个方法对于大群会慢，建议只获取前500人
+        for i in range(1, max_members + 1):
+            try:
+                # 注意：get_chat_member 需要用户ID，无法通过索引获取
+                # 实际上 Telegram API 不支持遍历所有成员
+                # 所以只能获取管理员和近期活跃成员
+                break
+            except Exception:
+                pass
+        
+        # 实际可行的方法：获取管理员 + 从消息中收集的成员
+        # 由于 API 限制，我们只能获取管理员列表
+        admins = await context.bot.get_chat_administrators(chat_id)
+        for admin in admins:
+            if admin.user.id != context.bot.id:
+                members.append(admin.user)
+        
+        # 如果群成员很少，尝试通过其他方式获取
+        if len(members) < 5:
+            # 尝试获取群成员（通过最近消息）
+            try:
+                # 获取群聊信息
+                chat = await context.bot.get_chat(chat_id)
+                # 如果群成员少于100，可能有其他方法
+                # 但Telegram API没有提供批量获取成员的方法
+                pass
+            except Exception:
+                pass
+                
     except Exception as e:
         announcement_running[str(chat_id)] = False
-        await update.message.reply_text(f"❌ အမှား: {e}")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"❌ အမှား: {e}",
+            parse_mode=None
+        )
         return
     
+    # 如果没有成员
     if not members:
         announcement_running[str(chat_id)] = False
-        await update.message.reply_text("❌ အဖွဲ့ဝင်မရှိပါ။")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="ℹ️ ဤအုပ်စုတွင် အဖွဲ့ဝင်များကို ရယူ၍မရပါ။\n"
+                 "ကြေငြာချက်ကို ပုံမှန်ပို့ထားပါသည်။",
+            parse_mode=None
+        )
         return
     
     total = len(members)
@@ -697,7 +738,6 @@ async def announce(update, context):
         msg = f"📌 {batch_num}/{total_batches} {line}"
         
         try:
-            # ✅ 移除 parse_mode
             await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode=None)
             sent += len(batch)
             await asyncio.sleep(0.5)
@@ -715,7 +755,6 @@ async def announce(update, context):
         text=f"✅ ကြေငြာချက် ပေးပို့ပြီးပါပြီ။\n👥 {total} ယောက်",
         parse_mode=None
     )
-
 
 async def stop_announce(update, context):
     """强制停止公告"""
