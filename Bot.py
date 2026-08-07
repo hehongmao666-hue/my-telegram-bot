@@ -30,6 +30,9 @@ ADMIN_IDS = [
     1062259560,  # Admin 1
 ]
 
+# ============ 公告状态管理 ============
+announcement_running = {}
+
 # ============ 日志系统 ============
 
 LOG_DIR = "logs"
@@ -607,84 +610,131 @@ async def forward_all(update, context):
 # ============ @所有人 公告功能 ============
 
 async def announce(update, context):
-    """在群里 @所有人 发送公告（仅 Owner 和指定管理员）"""
+    """最简洁的艾特所有人公告"""
+    global announcement_running
+    
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     
-    # 检查是否有权限
+    # 权限检查
     if user_id not in ADMIN_IDS:
         await update.message.reply_text("⛔️ သင့်တွင် ဤ command ကိုသုံးခွင့်မရှိပါ။")
         return
     
-    # 检查是否在群组中使用
     if update.effective_chat.type == "private":
         await update.message.reply_text("❌ ဤ command ကို အုပ်စုများတွင်သာ သုံးနိုင်သည်။")
         return
     
-    # 获取公告内容
     text = ' '.join(context.args)
     if not text:
         await update.message.reply_text(
-            "📝 *အသုံးပြုပုံ:* `/announce [စာသား]`\n\n"
-            "ဥပမာ: `/announce ဒီနေ့ အထူးလျှော့စျေး 30%!`",
-            parse_mode="Markdown"
+            "📝 `/announce [စာသား]`\n"
+            "🛑 `/stop_announce` - ရပ်ရန်"
         )
         return
     
+    # 检查是否有公告正在运行
+    if announcement_running.get(str(chat_id), False):
+        await update.message.reply_text("⏳ ကြေငြာတစ်ခု ပို့နေပြီ။ ကျေးဇူးပြု၍ စောင့်ပါ။")
+        return
+    
+    # 标记为运行中
+    announcement_running[str(chat_id)] = True
+    
+    # 发送公告标题
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=f"📢 {text}\n━━━━━━━━━━━━━━━━\n🛑 /stop_announce - ရပ်ရန်",
+        parse_mode="Markdown"
+    )
+    
+    # 获取成员
     try:
-        chat = await context.bot.get_chat(chat_id)
-        chat_title = chat.title or "အုပ်စု"
-    except Exception:
-        chat_title = "အုပ်စု"
-    
-    try:
-        bot_member = await context.bot.get_chat_member(chat_id, context.bot.id)
-        can_mention = bot_member.status in ["administrator", "creator"]
-    except Exception:
-        can_mention = False
-    
-    # ✅ 使用 Telegram 原生 @所有人 格式
-    mention_text = ""
-    if can_mention:
-        mention_text = '<a href="tg://mention?user=all">@all</a>\n\n'
-    
-    # ✅ 全部使用缅文
-    announcement = f"📢 *ကြေငြာ*\n"
-    announcement += f"━━━━━━━━━━━━━━━━\n\n"
-    if mention_text:
-        announcement += mention_text
-    announcement += f"{text}\n\n"
-    announcement += f"━━━━━━━━━━━━━━━━\n"
-    announcement += f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-    announcement += f"👤 {update.effective_user.first_name or 'Admin'}"
-    
-    keyboard = [
-        [InlineKeyboardButton("🔔 သတင်းရယူမည်", callback_data=f"announce_subscribe_{chat_id}_{int(time.time())}")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    try:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=announcement,
-            parse_mode="HTML",
-            reply_markup=reply_markup
-        )
-        
-        if not can_mention:
-            await update.message.reply_text(
-                "ℹ️ Bot သည် အုပ်စုတွင် အက်ဒမင်မဟုတ်သောကြောင့် @all ကို မသုံးနိုင်ပါ။\n"
-                "ကျေးဇူးပြု၍ Bot ကို အက်ဒမင်အဖြစ်သတ်မှတ်ပါ။"
-            )
-        
-        user_id_int, username = get_user_info(update)
-        log_action(user_id_int, username, "ANNOUNCE", f"公告: {text[:50]}... | 群组: {chat_title}")
-        
+        members = []
+        async for member in context.bot.get_chat_members(chat_id):
+            if member.user.id != context.bot.id:
+                members.append(member.user)
+                if len(members) >= 2000:
+                    break
     except Exception as e:
-        await update.message.reply_text(f"❌ ပို့ရာတွင် အမှားရှိသည်: {e}")
+        announcement_running[str(chat_id)] = False
+        await update.message.reply_text(f"❌ အမှား: {e}")
+        return
+    
+    if not members:
+        announcement_running[str(chat_id)] = False
+        await update.message.reply_text("❌ အဖွဲ့ဝင်မရှိပါ။")
+        return
+    
+    total = len(members)
+    batch_size = 20
+    total_batches = (total + batch_size - 1) // batch_size
+    
+    emojis = ["🎯", "🔥", "⭐", "💎", "🌟", "🎮", "🕹️", "🎲", "♠️", "♦️", 
+              "🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "⚫️", "⚪️", "💜", "💙"]
+    
+    sent = 0
+    for i in range(0, total, batch_size):
+        # ✅ 检查是否被停止
+        if not announcement_running.get(str(chat_id), False):
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"🛑 *ကြေငြာကို ရပ်လိုက်ပြီ။*\nပို့ပြီး: {sent}/{total}"
+            )
+            return
+        
+        batch = members[i:i+batch_size]
+        batch_num = i // batch_size + 1
+        
+        # 构建一行消息
+        line = ""
+        for idx, member in enumerate(batch):
+            emoji = emojis[idx % len(emojis)]
+            name = f"@{member.username}" if member.username else member.first_name or "U"
+            line += f"{emoji}{name} "
+        
+        # 精简格式
+        msg = f"📌 {batch_num}/{total_batches} {line}"
+        
+        try:
+            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown")
+            sent += len(batch)
+            await asyncio.sleep(0.5)
+        except Exception as e:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"⚠️ ပို့ရာတွင် အမှားရှိသည်: {e}"
+            )
+    
+    # 完成
+    announcement_running[str(chat_id)] = False
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=f"✅ *ကြေငြာ ပေးပို့ပြီးပါပြီ။*\n👥 {total} ယောက်"
+    )
+
+async def stop_announce(update, context):
+    """强制停止公告"""
+    global announcement_running
+    
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+    
+    # 权限检查
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔️ သင့်တွင် ဤ command ကိုသုံးခွင့်မရှိပါ။")
+        return
+    
+    if not announcement_running.get(str(chat_id), False):
+        await update.message.reply_text("ℹ️ လက်ရှိ ကြေငြာ ပို့နေခြင်းမရှိပါ။")
+        return
+    
+    # 停止
+    announcement_running[str(chat_id)] = False
+    await update.message.reply_text("🛑 *ကြေငြာကို ရပ်လိုက်ပြီ။*")
 
 async def announce_callback(update, context):
-    """公告按钮回调 - 支持多人点击，不删除原公告"""
+    """公告按钮回调 - 限制每人只能点击一次"""
     query = update.callback_query
     await query.answer()
     
@@ -692,23 +742,44 @@ async def announce_callback(update, context):
         user = query.from_user
         chat_id = query.message.chat.id
         
-        # 获取当前订阅人数
+        # ✅ 检查是否已经订阅过
         data = load_data()
         subscribers = data.get("subscribers", [])
-        if user.id not in subscribers:
-            subscribers.append(user.id)
-            data["subscribers"] = subscribers
-            save_data(data)
         
-        # ✅ 只在原公告下方发送一条通知（不修改原公告）
+        if user.id in subscribers:
+            # ✅ 已订阅：提示用户，不发新消息
+            await query.answer("✅ သင်သည် သတင်းရယူပြီးဖြစ်သည်။", show_alert=True)
+            return
+        
+        # ✅ 未订阅：添加并发送通知
+        subscribers.append(user.id)
+        data["subscribers"] = subscribers
+        save_data(data)
+        
         await context.bot.send_message(
             chat_id=chat_id,
             text=f"🔔 {user.mention_html()} သည် အသိပေးချက်ကို လက်ခံထားပြီး။ (စုစုပေါင်း {len(subscribers)} ယောက်)",
             parse_mode="HTML"
         )
         
-        # ✅ 只提示用户，不修改按钮
-        await query.answer(f"✅ {user.first_name} အတွက် အောင်မြင်ပါပြီ။", show_alert=False)
+        # ✅ 更新按钮为已订阅状态
+        try:
+            keyboard = [
+                [InlineKeyboardButton("✅ သတင်းရယူပြီး", callback_data="already_subscribed")],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_reply_markup(reply_markup=reply_markup)
+        except Exception:
+            pass
+        
+        await query.answer(f"✅ {user.first_name} အတွက် အောင်မြင်ပါပြီ။")
+
+
+async def already_subscribed_callback(update, context):
+    """已订阅用户再次点击按钮"""
+    query = update.callback_query
+    await query.answer()
+    await query.answer("✅ သင်သည် သတင်းရယူပြီးဖြစ်သည်။", show_alert=True)
 
 # ============ 随机链接 ============
 
@@ -1912,6 +1983,9 @@ def main():
     app.add_handler(CallbackQueryHandler(shop_callback, pattern="^shop_open$"))
     app.add_handler(CallbackQueryHandler(announce_callback, pattern="^announce_"))
     app.add_handler(CallbackQueryHandler(announce_callback, pattern="^announce_subscribe_"))
+    app.add_handler(CallbackQueryHandler(already_subscribed_callback, pattern="^already_subscribed$"))
+    app.add_handler(CommandHandler("announce", announce))
+    app.add_handler(CommandHandler("stop_announce", stop_announce))
     
     print("📌 All handlers added...")
     
