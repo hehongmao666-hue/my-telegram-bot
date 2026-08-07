@@ -628,24 +628,24 @@ async def announce(update, context):
     text = ' '.join(context.args)
     if not text:
         await update.message.reply_text(
-            "📝 `/announce [စာသား]`\n"
-            "🛑 `/stop_announce` - ရပ်ရန်"
+            "📝 /announce [စာသား]\n"
+            "🛑 /stop_announce - ရပ်ရန်"
         )
         return
     
     # 检查是否有公告正在运行
     if announcement_running.get(str(chat_id), False):
-        await update.message.reply_text("⏳ ကြေငြာတစ်ခု ပို့နေပြီ။ ကျေးဇူးပြု၍ စောင့်ပါ။")
+        await update.message.reply_text("⏳ ကြေငြာချက်တစ်ခု ပို့နေပြီ။ ကျေးဇူးပြု၍ စောင့်ပါ။")
         return
     
     # 标记为运行中
     announcement_running[str(chat_id)] = True
     
-    # 发送公告标题
+    # ✅ 发送公告标题（移除 parse_mode）
     await context.bot.send_message(
         chat_id=chat_id,
         text=f"📢 {text}\n━━━━━━━━━━━━━━━━\n🛑 /stop_announce - ရပ်ရန်",
-        parse_mode="Markdown"
+        parse_mode=None
     )
     
     # 获取成员
@@ -675,11 +675,12 @@ async def announce(update, context):
     
     sent = 0
     for i in range(0, total, batch_size):
-        # ✅ 检查是否被停止
+        # 检查是否被停止
         if not announcement_running.get(str(chat_id), False):
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=f"🛑 *ကြေငြာကို ရပ်လိုက်ပြီ။*\nပို့ပြီး: {sent}/{total}"
+                text=f"🛑 ကြေငြာချက်ကို ရပ်လိုက်ပြီ။\nပို့ပြီး: {sent}/{total}",
+                parse_mode=None
             )
             return
         
@@ -693,25 +694,28 @@ async def announce(update, context):
             name = f"@{member.username}" if member.username else member.first_name or "U"
             line += f"{emoji}{name} "
         
-        # 精简格式
         msg = f"📌 {batch_num}/{total_batches} {line}"
         
         try:
-            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown")
+            # ✅ 移除 parse_mode
+            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode=None)
             sent += len(batch)
             await asyncio.sleep(0.5)
         except Exception as e:
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=f"⚠️ ပို့ရာတွင် အမှားရှိသည်: {e}"
+                text=f"⚠️ ပို့ရာတွင် အမှားရှိသည်: {e}",
+                parse_mode=None
             )
     
     # 完成
     announcement_running[str(chat_id)] = False
     await context.bot.send_message(
         chat_id=chat_id,
-        text=f"✅ *ကြေငြာ ပေးပို့ပြီးပါပြီ။*\n👥 {total} ယောက်"
+        text=f"✅ ကြေငြာချက် ပေးပို့ပြီးပါပြီ။\n👥 {total} ယောက်",
+        parse_mode=None
     )
+
 
 async def stop_announce(update, context):
     """强制停止公告"""
