@@ -30,8 +30,17 @@ ADMIN_IDS = [
     1062259560,  # Admin 1
 ]
 
-# ============ 公告状态管理 ============
+# ============ 公告状态 ============
 announcement_running = {}
+
+# 保存最后一条公告 Message ID
+last_announcement = {}
+
+# 公告按钮（以后改这里即可）
+ANNOUNCE_BUTTONS = [
+    ("🎮 Activity", "https://t.me/Myanmar_GameFriendss"),
+    ("👤 Owner", "https://t.me/MCLP1_1"),
+]
 
 # ============ 日志系统 ============
 
@@ -92,11 +101,157 @@ def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-            # ✅ 确保 subscribers 字段存在
-            if "subscribers" not in data:
-                data["subscribers"] = []
-            return data
-    return {"users": [], "groups": [], "blacklist": [], "subscribers": []}
+
+        if "users" not in data:
+            data["users"] = []
+
+        if "groups" not in data:
+            data["groups"] = []
+
+        if "blacklist" not in data:
+            data["blacklist"] = []
+
+        if "subscribers" not in data:
+            data["subscribers"] = []
+
+        if "active_members" not in data:
+            data["active_members"] = {}
+
+        return data
+
+    return {
+        "users": [],
+        "groups": [],
+        "blacklist": [],
+        "subscribers": [],
+        "active_members": {}
+    }
+
+# ==========================
+# Active Member System
+# ==========================
+
+def save_active_member(chat_id, user, message_type="text"):
+    """
+    保存群活跃成员
+    """
+
+    # 私聊不记录
+    if chat_id > 0:
+        return
+
+    data = load_data()
+
+    active = data.setdefault("active_members", {})
+
+    chat_key = str(chat_id)
+
+    if chat_key not in active:
+        active[chat_key] = {}
+
+    uid = str(user.id)
+
+    info = active[chat_key].get(uid, {})
+
+    info["id"] = user.id
+    info["name"] = user.full_name or ""
+    info["username"] = user.username or ""
+
+    # 新增 ↓↓↓
+    info["is_bot"] = user.is_bot
+    info["language_code"] = user.language_code or ""
+    
+    # 第一次出现时间（只记录一次）
+    info.setdefault("first_seen", int(time.time()))
+    
+    # 每次消息都会更新
+    info["last_active"] = int(time.time())
+    info["message_count"] = info.get("message_count", 0) + 1
+    info["last_message_type"] = message_type
+    
+    active[chat_key][uid] = info
+
+    save_data(data)
+
+======================
+
+async def active_member_listener(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Active Member System
+    静默记录群成员活跃信息
+    """
+
+    # 没有消息
+    if update.message is None:
+        return
+
+    # 私聊不记录
+    if update.effective_chat.type == "private":
+        return
+
+    # 没有用户
+    if update.effective_user is None:
+        return
+
+    # 不记录机器人
+    if update.effective_user.is_bot:
+        return
+
+    msg = update.message
+
+    # 判断消息类型
+    if msg.text:
+        message_type = "text"
+
+    elif msg.photo:
+        message_type = "photo"
+
+    elif msg.video:
+        message_type = "video"
+
+    elif msg.animation:
+        message_type = "gif"
+
+    elif msg.sticker:
+        message_type = "sticker"
+
+    elif msg.voice:
+        message_type = "voice"
+
+    elif msg.video_note:
+        message_type = "video_note"
+
+    elif msg.audio:
+        message_type = "audio"
+
+    elif msg.document:
+        message_type = "document"
+
+    elif msg.contact:
+        message_type = "contact"
+
+    elif msg.location:
+        message_type = "location"
+
+    elif msg.poll:
+        message_type = "poll"
+
+    else:
+        message_type = "other"
+
+    try:
+
+        save_active_member(
+            chat_id=update.effective_chat.id,
+            user=update.effective_user,
+            message_type=message_type
+        )
+
+    except Exception as e:
+
+        logger.error(f"[ActiveMember] {e}")
+
+# ===== Active Member System =====
 
 def save_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -609,172 +764,170 @@ async def forward_all(update, context):
 
 # ============ @所有人 公告功能 ============
 
-async def announce(update, context):
-    """最简洁的艾特所有人公告"""
-    global announcement_running
-    
+async def announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """公告"""
+
+    global last_announcement
+
     user_id = update.effective_user.id
-    chat_id = update.effective_chat.id
-    
-    # 权限检查
+    chat = update.effective_chat
+    chat_id = chat.id
+
+    # 权限
     if user_id not in ADMIN_IDS:
-        await update.message.reply_text("⛔️ သင့်တွင် ဤ command ကိုသုံးခွင့်မရှိပါ။")
-        return
-    
-    if update.effective_chat.type == "private":
-        await update.message.reply_text("❌ ဤ command ကို အုပ်စုများတွင်သာ သုံးနိုင်သည်။")
-        return
-    
-    text = ' '.join(context.args)
-    if not text:
         await update.message.reply_text(
-            "📝 /announce [စာသား]\n"
-            "🛑 /stop_announce - ရပ်ရန်"
+            "⛔️ သင့်တွင် ဤ command ကိုသုံးခွင့်မရှိပါ။"
         )
         return
-    
-    # 检查是否有公告正在运行
-    if announcement_running.get(str(chat_id), False):
-        await update.message.reply_text("⏳ ကြေငြာချက်တစ်ခု ပို့နေပြီ။ ကျေးဇူးပြု၍ စောင့်ပါ။")
+
+    # 私聊禁止
+    if chat.type == "private":
+        await update.message.reply_text(
+            "❌ ဤ command ကို Group ထဲတွင်သာ အသုံးပြုနိုင်ပါသည်။"
+        )
         return
-    
-    # 标记为运行中
-    announcement_running[str(chat_id)] = True
-    
-    # 发送公告标题
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=f"📢 {text}\n━━━━━━━━━━━━━━━━\n🛑 /stop_announce - ရပ်ရန်",
-        parse_mode=None
-    )
-    
-    # ✅ 获取所有成员
-    members = []
+
+    # 内容
+    text = " ".join(context.args)
+
+    if not text:
+
+        await update.message.reply_text(
+
+            "📝 အသုံးပြုပုံ\n\n"
+
+            "/announce [စာသား]\n\n"
+
+            "ဥပမာ\n"
+
+            "/announce 🎉 PUBG Event Start!"
+
+        )
+
+        return
+
+    # 成员数
     try:
-        # 获取成员总数
-        total_count = await context.bot.get_chat_member_count(chat_id)
-        
-        # 限制最大获取人数（防止超时）
-        max_members = min(total_count, 500)
-        
-        # 通过 get_chat_member 逐个获取（只能这样，没有批量API）
-        # 注意：这个方法对于大群会慢，建议只获取前500人
-        for i in range(1, max_members + 1):
-            try:
-                # 注意：get_chat_member 需要用户ID，无法通过索引获取
-                # 实际上 Telegram API 不支持遍历所有成员
-                # 所以只能获取管理员和近期活跃成员
-                break
-            except Exception:
-                pass
-        
-        # 实际可行的方法：获取管理员 + 从消息中收集的成员
-        # 由于 API 限制，我们只能获取管理员列表
-        admins = await context.bot.get_chat_administrators(chat_id)
-        for admin in admins:
-            if admin.user.id != context.bot.id:
-                members.append(admin.user)
-        
-        # 如果群成员很少，尝试通过其他方式获取
-        if len(members) < 5:
-            # 尝试获取群成员（通过最近消息）
-            try:
-                # 获取群聊信息
-                chat = await context.bot.get_chat(chat_id)
-                # 如果群成员少于100，可能有其他方法
-                # 但Telegram API没有提供批量获取成员的方法
-                pass
-            except Exception:
-                pass
-                
-    except Exception as e:
-        announcement_running[str(chat_id)] = False
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=f"❌ အမှား: {e}",
-            parse_mode=None
-        )
-        return
-    
-    # 如果没有成员
-    if not members:
-        announcement_running[str(chat_id)] = False
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="ℹ️ ဤအုပ်စုတွင် အဖွဲ့ဝင်များကို ရယူ၍မရပါ။\n"
-                 "ကြေငြာချက်ကို ပုံမှန်ပို့ထားပါသည်။",
-            parse_mode=None
-        )
-        return
-    
-    total = len(members)
-    batch_size = 20
-    total_batches = (total + batch_size - 1) // batch_size
-    
-    emojis = ["🎯", "🔥", "⭐", "💎", "🌟", "🎮", "🕹️", "🎲", "♠️", "♦️", 
-              "🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "⚫️", "⚪️", "💜", "💙"]
-    
-    sent = 0
-    for i in range(0, total, batch_size):
-        # 检查是否被停止
-        if not announcement_running.get(str(chat_id), False):
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"🛑 ကြေငြာချက်ကို ရပ်လိုက်ပြီ။\nပို့ပြီး: {sent}/{total}",
-                parse_mode=None
-            )
-            return
-        
-        batch = members[i:i+batch_size]
-        batch_num = i // batch_size + 1
-        
-        # 构建一行消息
-        line = ""
-        for idx, member in enumerate(batch):
-            emoji = emojis[idx % len(emojis)]
-            name = f"@{member.username}" if member.username else member.first_name or "U"
-            line += f"{emoji}{name} "
-        
-        msg = f"📌 {batch_num}/{total_batches} {line}"
-        
-        try:
-            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode=None)
-            sent += len(batch)
-            await asyncio.sleep(0.5)
-        except Exception as e:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"⚠️ ပို့ရာတွင် အမှားရှိသည်: {e}",
-                parse_mode=None
-            )
-    
-    # 完成
-    announcement_running[str(chat_id)] = False
-    await context.bot.send_message(
+        member_count = await context.bot.get_chat_member_count(chat_id)
+    except:
+        member_count = "Unknown"
+
+    # 时间
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    # 按钮
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                ANNOUNCE_BUTTONS[0][0],
+                url=ANNOUNCE_BUTTONS[0][1]
+            ),
+            InlineKeyboardButton(
+                ANNOUNCE_BUTTONS[1][0],
+                url=ANNOUNCE_BUTTONS[1][1]
+            ),
+        ]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    # 公告内容
+    message = await context.bot.send_message(
+
         chat_id=chat_id,
-        text=f"✅ ကြေငြာချက် ပေးပို့ပြီးပါပြီ။\n👥 {total} ယောက်",
-        parse_mode=None
+
+        text=(
+            "━━━━━━━━━━━━━━━━━━\n"
+            "📢 <b>GROUP ANNOUNCEMENT</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            f"{text}\n\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"👥 Members : {member_count}\n"
+            f"🕒 {now}\n"
+            "━━━━━━━━━━━━━━━━━━"
+        ),
+
+        parse_mode="HTML",
+
+        reply_markup=reply_markup
+
     )
 
-async def stop_announce(update, context):
-    """强制停止公告"""
-    global announcement_running
-    
-    user_id = update.effective_user.id
-    chat_id = update.effective_chat.id
-    
-    # 权限检查
-    if user_id not in ADMIN_IDS:
-        await update.message.reply_text("⛔️ သင့်တွင် ဤ command ကိုသုံးခွင့်မရှိပါ။")
+    # 自动取消旧置顶
+    try:
+
+        if chat_id in last_announcement:
+
+            await context.bot.unpin_chat_message(
+
+                chat_id=chat_id,
+
+                message_id=last_announcement[chat_id]
+
+            )
+
+    except Exception:
+
+        pass
+
+    # 自动置顶
+    try:
+
+        await context.bot.pin_chat_message(
+
+            chat_id,
+
+            message.message_id,
+
+            disable_notification=False
+
+        )
+
+        last_announcement[chat_id] = message.message_id
+
+    except Exception:
+
+        await update.message.reply_text(
+
+            "⚠️ Bot 没有 Pin Message 权限。"
+
+        )
+
+    # 日志
+    log_action(
+
+        user_id,
+
+        update.effective_user.username,
+
+        "ANNOUNCE",
+
+        text[:100]
+
+    )
+
+    # 完成
+    await update.message.reply_text(
+
+        "✅ ကြေငြာ ပို့ပြီးပါပြီ။"
+
+    )
+
+async def stop_announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if update.effective_user.id not in ADMIN_IDS:
+
+        await update.message.reply_text(
+            "⛔️ သင့်တွင် ဤ command ကိုသုံးခွင့်မရှိပါ။"
+        )
+
         return
-    
-    if not announcement_running.get(str(chat_id), False):
-        await update.message.reply_text("ℹ️ လက်ရှိ ကြေငြာ ပို့နေခြင်းမရှိပါ။")
-        return
-    
-    # 停止
-    announcement_running[str(chat_id)] = False
-    await update.message.reply_text("🛑 *ကြေငြာကို ရပ်လိုက်ပြီ။*")
+
+    await update.message.reply_text(
+
+        "ℹ️ ဤဗားရှင်းတွင် Announcement သည် ချက်ချင်းပို့သောကြောင့် Stop မလိုအပ်ပါ။"
+
+    )
 
 async def announce_callback(update, context):
     """公告按钮回调 - 限制每人只能点击一次"""
@@ -1982,63 +2135,169 @@ async def check_schedule(app):
 # ============ main ============
 def main():
     print("📌 Entering main()...")
+
     app = Application.builder().token(TOKEN).build()
-    
+
     try:
         app.bot.delete_webhook(drop_pending_updates=True)
         print("📌 Webhook cleared...")
     except Exception as e:
         print(f"⚠️ Webhook clear warning: {e}")
-    
+
     print("📌 Application built successfully...")
-    
+
+    # ==========================
+    # Commands
+    # ==========================
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("count", count))
+
     app.add_handler(CommandHandler("send", send))
     app.add_handler(CommandHandler("broadcast", broadcast))
     app.add_handler(CommandHandler("broadcast_image", broadcast_image))
     app.add_handler(CommandHandler("broadcast_group", broadcast_group))
     app.add_handler(CommandHandler("broadcast_user", broadcast_user))
+
     app.add_handler(CommandHandler("at", at))
     app.add_handler(CommandHandler("in", in_))
+
     app.add_handler(CommandHandler("list_schedule", list_schedule))
     app.add_handler(CommandHandler("cancel_schedule", cancel_schedule))
+
     app.add_handler(CommandHandler("preset", preset))
+
     app.add_handler(CommandHandler("blacklist", blacklist))
+
     app.add_handler(CommandHandler("cancel", cancel))
+
     app.add_handler(CommandHandler("forward", forward))
     app.add_handler(CommandHandler("forward_all", forward_all))
+
+    # ==========================
+    # RPG
+    # ==========================
+
     app.add_handler(CommandHandler("game", game_start))
     app.add_handler(CommandHandler("restartgame", game_restart))
     app.add_handler(CommandHandler("back", game_back))
     app.add_handler(CommandHandler("status", game_status))
     app.add_handler(CommandHandler("shop", game_shop))
-    app.add_handler(CommandHandler("announce", announce))
-    app.add_handler(CallbackQueryHandler(random_link_callback, pattern="^random_link$"))
-    app.add_handler(CallbackQueryHandler(back_to_menu_callback, pattern="^back_to_menu$"))
-    app.add_handler(CallbackQueryHandler(game_callback, pattern="^game_"))
-    app.add_handler(CallbackQueryHandler(game_callback, pattern="^restart_"))
-    app.add_handler(CallbackQueryHandler(game_callback, pattern="^level_"))
-    app.add_handler(CallbackQueryHandler(shop_callback, pattern="^shop_"))
-    app.add_handler(CallbackQueryHandler(shop_callback, pattern="^back_to_game$"))
-    app.add_handler(CallbackQueryHandler(shop_callback, pattern="^shop_open$"))
-    app.add_handler(CallbackQueryHandler(announce_callback, pattern="^announce_"))
-    app.add_handler(CallbackQueryHandler(announce_callback, pattern="^announce_subscribe_"))
-    app.add_handler(CallbackQueryHandler(already_subscribed_callback, pattern="^already_subscribed$"))
+
+    # ==========================
+    # Announcement
+    # ==========================
+
     app.add_handler(CommandHandler("announce", announce))
     app.add_handler(CommandHandler("stop_announce", stop_announce))
-    
+
+    # ==========================
+    # Callback
+    # ==========================
+
+    app.add_handler(
+        CallbackQueryHandler(
+            random_link_callback,
+            pattern="^random_link$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            back_to_menu_callback,
+            pattern="^back_to_menu$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            game_callback,
+            pattern="^game_"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            game_callback,
+            pattern="^restart_"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            game_callback,
+            pattern="^level_"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            shop_callback,
+            pattern="^shop_"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            shop_callback,
+            pattern="^back_to_game$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            shop_callback,
+            pattern="^shop_open$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            announce_callback,
+            pattern="^announce_"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            announce_callback,
+            pattern="^announce_subscribe_"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            already_subscribed_callback,
+            pattern="^already_subscribed$"
+        )
+    )
+
+    # ==========================
+    # Active Member System
+    # (静默记录群成员)
+    # ==========================
+
+    app.add_handler(
+        MessageHandler(
+            filters.ALL & ~filters.StatusUpdate.ALL,
+            active_member_listener
+        ),
+        group=99
+    )
+
     print("📌 All handlers added...")
-    
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.create_task(check_schedule(app))
-    
+
     print("🤖 Advanced Bot started.")
     print("📊 Loaded commands. Owner-only functions active.")
+
     app.run_polling()
+
 
 if __name__ == "__main__":
     print("🔵 Script started...")
