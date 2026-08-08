@@ -1,13 +1,33 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
+# ==========================
+# Telegram
+# ==========================
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
+
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
+
+# ==========================
+# Python
+# ==========================
 import json
 import os
 import asyncio
 import time
 import re
 import random
-from datetime import datetime
 import logging
+
+from datetime import datetime
 from dotenv import load_dotenv
 
 # ============ 加载环境变量 ============
@@ -2132,15 +2152,11 @@ async def check_schedule(app):
 
 # ============ main ============
 def main():
+    print("🔵 Script started...")
     print("📌 Entering main()...")
 
+    # 创建 Application
     app = Application.builder().token(TOKEN).build()
-
-    try:
-        app.bot.delete_webhook(drop_pending_updates=True)
-        print("📌 Webhook cleared...")
-    except Exception as e:
-        print(f"⚠️ Webhook clear warning: {e}")
 
     print("📌 Application built successfully...")
 
@@ -2166,9 +2182,7 @@ def main():
     app.add_handler(CommandHandler("cancel_schedule", cancel_schedule))
 
     app.add_handler(CommandHandler("preset", preset))
-
     app.add_handler(CommandHandler("blacklist", blacklist))
-
     app.add_handler(CommandHandler("cancel", cancel))
 
     app.add_handler(CommandHandler("forward", forward))
@@ -2192,7 +2206,7 @@ def main():
     app.add_handler(CommandHandler("stop_announce", stop_announce))
 
     # ==========================
-    # Callback
+    # Callback Query
     # ==========================
 
     app.add_handler(
@@ -2274,29 +2288,25 @@ def main():
 
     # ==========================
     # Active Member System
-    # (静默记录群成员)
     # ==========================
 
     app.add_handler(
         MessageHandler(
             filters.ALL & ~filters.StatusUpdate.ALL,
-            active_member_listener
+            active_member_listener,
         ),
-        group=99
+        group=99,
     )
 
-    print("📌 All handlers added...")
-
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.create_task(check_schedule(app))
-
-    print("🤖 Advanced Bot started.")
+    print("✅ All handlers loaded.")
+    print("🚀 Myanmar Community Manager Bot Started")
     print("📊 Loaded commands. Owner-only functions active.")
 
-    app.run_polling()
+    # 启动机器人
+    app.run_polling(
+        drop_pending_updates=True
+    )
 
 
 if __name__ == "__main__":
-    print("🔵 Script started...")
     main()
