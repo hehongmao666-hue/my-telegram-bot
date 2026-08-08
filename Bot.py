@@ -173,8 +173,6 @@ def save_active_member(chat_id, user, message_type="text"):
 
     save_data(data)
 
-======================
-
 async def active_member_listener(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Active Member System
