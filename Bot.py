@@ -50,8 +50,17 @@ ADMIN_IDS = [
     1062259560,  # Admin 1
 ]
 
-# ============ 公告状态 ============
+# ==========================
+# Announcement
+# ==========================
+
 announcement_running = {}
+
+ANNOUNCE_DELAY = 0.8      # 每条公告间隔（秒）
+ANNOUNCE_DAYS = 30        # 默认通知最近30天活跃成员
+ANNOUNCE_MAX_LENGTH = 3500
+
+# ============ 公告状态 ============
 
 # 保存最后一条公告 Message ID
 last_announcement = {}
@@ -173,41 +182,51 @@ def save_active_member(chat_id, user, message_type="text"):
 
     info = active[chat_key].get(uid, {})
 
+    # ========= 基础信息 =========
     info["id"] = user.id
     info["name"] = user.full_name or ""
+    info["first_name"] = user.first_name or ""
+    info["last_name"] = user.last_name or ""
     info["username"] = user.username or ""
 
-    # 新增 ↓↓↓
+    # ========= Telegram 信息 =========
     info["is_bot"] = user.is_bot
     info["language_code"] = user.language_code or ""
-    
-    # 第一次出现时间（只记录一次）
-    info.setdefault("first_seen", int(time.time()))
-    
-    # 每次消息都会更新
-    info["last_active"] = int(time.time())
+
+    # ========= 时间 =========
+    now = int(time.time())
+
+    # 第一次出现（只记录一次）
+    info.setdefault("first_seen", now)
+
+    # 每次更新
+    info["last_active"] = now
+
+    # ========= 统计 =========
     info["message_count"] = info.get("message_count", 0) + 1
     info["last_message_type"] = message_type
-    
+
     active[chat_key][uid] = info
 
     save_data(data)
 
+
 async def active_member_listener(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Active Member System
-    静默记录群成员活跃信息
+    静默记录群成员
     """
 
-    # 没有消息
     if update.message is None:
+        return
+
+    if update.effective_chat is None:
         return
 
     # 私聊不记录
     if update.effective_chat.type == "private":
         return
 
-    # 没有用户
     if update.effective_user is None:
         return
 
@@ -217,7 +236,7 @@ async def active_member_listener(update: Update, context: ContextTypes.DEFAULT_T
 
     msg = update.message
 
-    # 判断消息类型
+    # ========= 判断消息类型 =========
     if msg.text:
         message_type = "text"
 
@@ -262,13 +281,140 @@ async def active_member_listener(update: Update, context: ContextTypes.DEFAULT_T
         save_active_member(
             chat_id=update.effective_chat.id,
             user=update.effective_user,
-            message_type=message_type
+            message_type=message_type,
         )
 
-    except Exception as e:
+    except Exception:
 
-        logger.error(f"[ActiveMember] {e}")
+        logger.exception("[ActiveMember]")
 
+def get_active_members(chat_id, days=30):
+    """
+    获取最近 N 天活跃成员
+    """
+
+    data = load_data()
+
+    active = data.get("active_members", {})
+
+    chat = active.get(str(chat_id), {})
+
+    now = int(time.time())
+
+    result = []
+
+    for uid, info in chat.items():
+
+        # 跳过机器人
+        if info.get("is_bot", False):
+            continue
+
+        last_active = info.get("last_active", 0)
+
+        if now - last_active <= days * 86400:
+            result.append(info)
+
+    # 按活跃时间排序
+    result.sort(
+        key=lambda x: x.get("last_active", 0),
+        reverse=True
+    )
+
+    return result
+
+
+def split_mentions(members, max_length=3500):
+    """
+    将成员分割成多条 @ 消息（支持 HTML Mention）
+    """
+
+    emojis = [
+        "🎯", "🔥", "⭐", "💎", "🌟",
+        "🎮", "🕹", "🎲", "💜", "💙",
+        "❤️", "💚", "🧡", "🤍", "🖤"
+    ]
+
+    result = []
+
+    current = ""
+
+    index = 0
+
+    for member in members:
+
+        # 跳过机器人
+        if member.get("is_bot", False):
+            continue
+
+        # 有 username
+        if member.get("username"):
+
+            mention = f"@{member['username']}"
+
+        # 没有 username，使用 HTML Mention
+        else:
+
+            uid = member.get("id")
+
+            if not uid:
+                continue
+
+            name = (
+                member.get("first_name")
+                or member.get("name")
+                or "User"
+            )
+
+            # HTML Mention
+            mention = f'<a href="tg://user?id={uid}">{name}</a>'
+
+        text = f"{emojis[index % len(emojis)]}{mention} "
+
+        # 超过长度，切下一条
+        if len(current) + len(text) > max_length:
+
+            result.append(current.strip())
+
+            current = text
+
+        else:
+
+            current += text
+
+        index += 1
+
+    if current:
+
+        result.append(current.strip())
+
+    return result
+
+def build_announcement_header(text, total):
+    """
+    公告头（缅文）
+    """
+
+    return (
+        "━━━━━━━━━━━━━━━━━━\n"
+        "📢 ကြေငြာ\n\n"
+        f"{text}\n\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        f"👥 ပို့ပေးရန် {total} ယောက်\n"
+        "━━━━━━━━━━━━━━━━━━"
+    )
+
+def build_finish_message(total):
+    """
+    公告结束
+    """
+
+    return (
+        "━━━━━━━━━━━━━━━━━━\n"
+        "✅ ကြေငြာ ပို့ပြီးပါပြီ။\n\n"
+        f"👥 စုစုပေါင်း {total} ယောက်\n"
+        "━━━━━━━━━━━━━━━━━━"
+    )
+	
 # ===== Active Member System =====
 
 def save_data(data):
@@ -783,153 +929,143 @@ async def forward_all(update, context):
 # ============ @所有人 公告功能 ============
 
 async def announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """公告"""
 
-    global last_announcement
+    global announcement_running
 
     user_id = update.effective_user.id
-    chat = update.effective_chat
-    chat_id = chat.id
+    chat_id = update.effective_chat.id
 
-    # 权限
+    # ========= 权限 =========
     if user_id not in ADMIN_IDS:
         await update.message.reply_text(
-            "⛔️ သင့်တွင် ဤ command ကိုသုံးခွင့်မရှိပါ။"
+            "⛔️ သင်တွင် ဤ command ကို အသုံးပြုခွင့်မရှိပါ။"
         )
         return
 
-    # 私聊禁止
-    if chat.type == "private":
+    # ========= 私聊 =========
+    if update.effective_chat.type == "private":
         await update.message.reply_text(
-            "❌ ဤ command ကို Group ထဲတွင်သာ အသုံးပြုနိုင်ပါသည်။"
+            "❌ ဤ command ကို Group တွင်သာ အသုံးပြုနိုင်သည်။"
         )
         return
 
-    # 内容
+    # ========= 公告内容 =========
     text = " ".join(context.args)
 
     if not text:
 
         await update.message.reply_text(
 
-            "📝 အသုံးပြုပုံ\n\n"
+            "အသုံးပြုပုံ\n\n"
 
-            "/announce [စာသား]\n\n"
-
-            "ဥပမာ\n"
-
-            "/announce 🎉 PUBG Event Start!"
+            "/announce စာသား"
 
         )
 
         return
 
-    # 成员数
-    try:
-        member_count = await context.bot.get_chat_member_count(chat_id)
-    except:
-        member_count = "Unknown"
-
-    # 时间
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    # 按钮
-    keyboard = [
-        [
-            InlineKeyboardButton(
-                ANNOUNCE_BUTTONS[0][0],
-                url=ANNOUNCE_BUTTONS[0][1]
-            ),
-            InlineKeyboardButton(
-                ANNOUNCE_BUTTONS[1][0],
-                url=ANNOUNCE_BUTTONS[1][1]
-            ),
-        ]
-    ]
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    # 公告内容
-    message = await context.bot.send_message(
-
-        chat_id=chat_id,
-
-        text=(
-            "━━━━━━━━━━━━━━━━━━\n"
-            "📢 <b>GROUP ANNOUNCEMENT</b>\n"
-            "━━━━━━━━━━━━━━━━━━\n\n"
-            f"{text}\n\n"
-            "━━━━━━━━━━━━━━━━━━\n"
-            f"👥 Members : {member_count}\n"
-            f"🕒 {now}\n"
-            "━━━━━━━━━━━━━━━━━━"
-        ),
-
-        parse_mode="HTML",
-
-        reply_markup=reply_markup
-
-    )
-
-    # 自动取消旧置顶
-    try:
-
-        if chat_id in last_announcement:
-
-            await context.bot.unpin_chat_message(
-
-                chat_id=chat_id,
-
-                message_id=last_announcement[chat_id]
-
-            )
-
-    except Exception:
-
-        pass
-
-    # 自动置顶
-    try:
-
-        await context.bot.pin_chat_message(
-
-            chat_id,
-
-            message.message_id,
-
-            disable_notification=False
-
-        )
-
-        last_announcement[chat_id] = message.message_id
-
-    except Exception:
+    # ========= 防重复 =========
+    if announcement_running.get(chat_id):
 
         await update.message.reply_text(
 
-            "⚠️ Bot 没有 Pin Message 权限。"
+            "⏳ ကြေငြာတစ်ခု ပို့နေပါသည်။"
 
         )
 
-    # 日志
-    log_action(
+        return
 
-        user_id,
+    announcement_running[chat_id] = True
 
-        update.effective_user.username,
+    try:
 
-        "ANNOUNCE",
+        members = get_active_members(
+            chat_id,
+            ANNOUNCE_DAYS
+        )
 
-        text[:100]
+        total = len(members)
 
-    )
+        if total == 0:
 
-    # 完成
-    await update.message.reply_text(
+            announcement_running[chat_id] = False
 
-        "✅ ကြေငြာ ပို့ပြီးပါပြီ။"
+            await update.message.reply_text(
 
-    )
+                "ℹ️ ပို့ပေးရန် Group မရှိပါ။"
+
+            )
+
+            return
+
+        # ==========================
+        # 发送公告头
+        # ==========================
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=build_announcement_header(text, total)
+        )
+
+        # ==========================
+        # 生成 @ 列表
+        # ==========================
+
+        mention_blocks = split_mentions(
+            members,
+            ANNOUNCE_MAX_LENGTH
+        )
+
+        sent = total
+
+        # ==========================
+        # 开始发送
+        # ==========================
+
+        for block in mention_blocks:
+
+            # 是否被停止
+            if not announcement_running.get(chat_id, False):
+
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="🛑 ကြေငြာကို ရပ်လိုက်ပါပြီ။"
+                )
+
+                return
+
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=block,
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
+
+            await asyncio.sleep(ANNOUNCE_DELAY)
+
+        # ==========================
+        # 完成
+        # ==========================
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=build_finish_message(sent)
+        )
+
+    except Exception as e:
+
+        logger.exception("[Announcement]")
+
+        await update.message.reply_text(
+
+            f"❌ {e}"
+
+        )
+
+    finally:
+
+        announcement_running[chat_id] = False
+
 
 async def stop_announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
