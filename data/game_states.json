@@ -1,0 +1,28 @@
+{
+  "5300063761": {
+    "name": "ဓားပြ ခိုင်",
+    "level": 1,
+    "max_level": 1,
+    "is_playing": true,
+    "owner_id": "5300063761",
+    "current_scene": "level_1_start",
+    "hp": 80,
+    "max_hp": 80,
+    "energy": 40,
+    "max_energy": 40,
+    "gold": 32,
+    "attack": 4,
+    "defense": 1,
+    "exp": 0,
+    "exp_to_next": 20,
+    "weapon": null,
+    "armor": null,
+    "potions": [],
+    "achievements": [],
+    "deaths": 3,
+    "game_messages": [
+      16026,
+      16027
+    ]
+  }
+}
