@@ -1,4 +1,68 @@
-logs/ 
+# ==========================
+# Python
+# ==========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ==========================
+# Virtual Environment
+# ==========================
+venv/
+env/
+ENV/
+.venv/
+myenv/
+
+# ==========================
+# IDE
+# ==========================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# ==========================
+# Bot Data (重要！不要上传！)
+# ==========================
+data/
+*.json
+!requirements.txt
+!README.md
+!.gitignore
+*.json.*
+*.txt.env*
+schedule.json
+presets.json
+announce_data.json
+
+# ==========================
+# Environment Variables (重要！不要上传！)
+# ==========================
 .env
-.env.txt.env 
-.env.txt 
+.env.local
+.env.txt
+.env.txt.env
+
+# ==========================
+# Logs
+# ==========================
+logs/
+*.log
+runtime
+
+# ==========================
+# Temporary Files
+# ==========================
+*.tmp
+*.temp
+Thumbs.db
