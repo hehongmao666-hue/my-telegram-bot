@@ -12,7 +12,7 @@ from utils.logger import logger
 
 def build_announcement_header(text: str) -> str:
     """构建公告头部消息"""
-    return f"🔉 အကြောင်းကြားချက်\n\n{text}"
+    return f"🔉 {text}"
 
 
 def split_members(members: list, batch_size: int = MENTION_BATCH_SIZE) -> List[List[Dict]]:
