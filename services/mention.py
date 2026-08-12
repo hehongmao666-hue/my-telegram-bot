@@ -1,5 +1,5 @@
 # ==========================
-# services/mention.py - 公告核心逻辑（V3.1 修复停止功能）
+# services/mention.py - 公告核心逻辑（V3.2 修复限流）
 # ==========================
 
 import asyncio
@@ -65,7 +65,7 @@ async def send_mentions(
     context,
     chat_id: int,
     members: List[Dict],
-    delay: float = ANNOUNCE_DELAY,
+    delay: float = 1.5,  # 改为 1.5 秒
     stop_flag: dict = None
 ) -> Dict[str, int]:
     """分批发送 @ 消息（支持立即停止）"""
@@ -108,48 +108,44 @@ async def send_mentions(
             data["html"]
         )
 
-        try:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=msg,
-                parse_mode="HTML",
-                disable_web_page_preview=True
-            )
-            stats["success"] += data["count"]
-            logger.info(f"[Announcement] Batch {data['batch_num']}/{data['total_batches']} ({data['count']})")
+        # 重试逻辑（最多 3 次）
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=msg,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True
+                )
+                stats["success"] += data["count"]
+                logger.info(f"[Announcement] Batch {data['batch_num']}/{data['total_batches']} ({data['count']})")
+                break
 
-        except Exception as e:
-            error_msg = str(e)
-            if "FloodWait" in error_msg or "Too Many Requests" in error_msg:
-                wait_time = 5
-                match = re.search(r"(\d+)", error_msg)
-                if match:
-                    wait_time = int(match.group(1))
-                logger.warning(f"[Announcement] FloodWait: waiting {wait_time}s")
-                await asyncio.sleep(wait_time)
-                try:
-                    await context.bot.send_message(
-                        chat_id=chat_id,
-                        text=msg,
-                        parse_mode="HTML",
-                        disable_web_page_preview=True
-                    )
-                    stats["success"] += data["count"]
-                    logger.info(f"[Announcement] Batch {data['batch_num']} retry success")
-                except Exception as retry_e:
+            except Exception as e:
+                error_msg = str(e)
+                if "FloodWait" in error_msg or "Too Many Requests" in error_msg or "RetryAfter" in error_msg:
+                    wait_time = 5
+                    match = re.search(r"(\d+)", error_msg)
+                    if match:
+                        wait_time = int(match.group(1)) + 2
+                    logger.warning(f"[Announcement] FloodWait: waiting {wait_time}s (attempt {attempt+1}/{max_retries})")
+                    await asyncio.sleep(wait_time)
+                    if attempt == max_retries - 1:
+                        stats["failed"] += data["count"]
+                        logger.error(f"[Announcement] Batch {data['batch_num']} failed after {max_retries} retries")
+                else:
                     stats["failed"] += data["count"]
-                    logger.error(f"[Announcement] Batch {data['batch_num']} retry failed: {retry_e}")
-            else:
-                stats["failed"] += data["count"]
-                logger.error(f"[Announcement] Batch {data['batch_num']} failed: {e}")
+                    logger.error(f"[Announcement] Batch {data['batch_num']} failed: {e}")
+                    break
 
-        # ✅ 可中断的睡眠（每0.1秒检查一次停止标志）
+        # 可中断的睡眠（每0.2秒检查一次停止标志）
         if delay > 0:
-            sleep_steps = int(delay / 0.1)
+            sleep_steps = int(delay / 0.2)
             for _ in range(sleep_steps):
                 if stop_flag is not None and not stop_flag.get(chat_key, False):
                     logger.info(f"[Announcement] Stopped during sleep at batch {data['batch_num']}")
                     return stats
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.2)
 
     return stats
