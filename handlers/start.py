@@ -223,15 +223,15 @@ async def help_about_callback(update, context):
     
     text = "ℹ️ *About This Bot*\n"
     text += "━" * 18 + "\n\n"
-    text += "🤖 *Community Manager Bot*\n"
+    text += "🤖 Community Manager Bot\n"
     text += "A multi-purpose Telegram bot with:\n"
     text += "• RPG Game System\n"
     text += "• Dungeon Adventure Mode\n"
     text += "• Announcement System\n"
     text += "• User Management\n\n"
-    text += "📝 *Version:* 3.2\n"
-    text += "👨‍💻 *Developer:* @MCLP1_1\n"
-    text += "📅 *Updated:* August 2026"
+    text += "📝 Version: 3.2\n"
+    text += "👨‍💻 Developer: @MCLP1_1\n"
+    text += "📅 Updated: August 2026"
     
     keyboard = [[InlineKeyboardButton("🔙 Back to Help", callback_data="help_back")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -240,7 +240,7 @@ async def help_about_callback(update, context):
         await query.edit_message_text(text, parse_mode="Markdown", reply_markup=reply_markup)
     except:
         await query.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
-
+        
 
 async def help_back_callback(update, context):
     """返回帮助主菜单"""
