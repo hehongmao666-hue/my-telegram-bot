@@ -1,5 +1,5 @@
 # ==========================
-# bot.py - 入口文件（地牢升级版 + 排行榜 + 签到）
+# bot.py - 入口文件（地牢升级版 + 排行榜 + 签到 + Help升级）
 # ==========================
 
 import asyncio
@@ -10,7 +10,14 @@ from storage import load_data, load_schedule, save_schedule, save_data
 from utils.logger import logger
 
 # ============ Handlers ============
-from handlers.start import start, help, stats, count
+from handlers.start import (
+    start, help, stats, count,
+    help_game_callback,
+    help_leaderboard_callback,
+    help_announce_callback,
+    help_about_callback,
+    help_back_callback
+)
 from handlers.broadcast import send, broadcast, broadcast_image, broadcast_group, broadcast_user, forward, forward_all
 from handlers.schedule import at, in_, list_schedule, cancel_schedule
 from handlers.preset import preset
@@ -125,6 +132,13 @@ def main():
     # ============ Leaderboard Callbacks ============
     app.add_handler(CallbackQueryHandler(leaderboard_refresh_callback, pattern="^leaderboard_refresh$"))
     
+    # ============ Help Callbacks ============
+    app.add_handler(CallbackQueryHandler(help_game_callback, pattern="^help_game$"))
+    app.add_handler(CallbackQueryHandler(help_leaderboard_callback, pattern="^help_leaderboard$"))
+    app.add_handler(CallbackQueryHandler(help_announce_callback, pattern="^help_announce$"))
+    app.add_handler(CallbackQueryHandler(help_about_callback, pattern="^help_about$"))
+    app.add_handler(CallbackQueryHandler(help_back_callback, pattern="^help_back$"))
+    
     # ============ Announcement Callbacks ============
     app.add_handler(CallbackQueryHandler(announce_callback, pattern="^announce_"))
     app.add_handler(CallbackQueryHandler(announce_callback, pattern="^announce_subscribe_"))
@@ -145,6 +159,7 @@ def main():
     print("🎮 /dungeon - 地牢探险模式已加载！")
     print("🏆 /leaderboard - 排行榜已加载！")
     print("✅ /checkin - 每日签到已加载！")
+    print("ℹ️ /help - 升级版帮助菜单已加载！")
 
     # 启动后台任务
     loop = asyncio.new_event_loop()
