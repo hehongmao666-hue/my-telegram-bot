@@ -344,10 +344,16 @@ async def dungeon_callback(update, context):
         path_type = parts[2]
         user_id = parts[3]
         
+        # 先删除原消息（避免编辑已删除的消息）
+        try:
+            await query.delete_message()
+        except:
+            pass
+        
         if path_type == "combat":
-            await handle_dungeon_event(chat_id, user_id, context, is_callback=True, target=query)
+            await handle_dungeon_event(chat_id, user_id, context, is_callback=False, target=None)
         elif path_type == "treasure":
-            await handle_dungeon_event(chat_id, user_id, context, is_callback=True, target=query)
+            await handle_dungeon_event(chat_id, user_id, context, is_callback=False, target=None)
         elif path_type == "rest":
             state = get_player_state(user_id)
             if state:
@@ -358,14 +364,15 @@ async def dungeon_callback(update, context):
                 states[user_id] = state
                 save_game_states(states)
                 keyboard = [[InlineKeyboardButton("🚪 ဆက်သွားမယ်", callback_data=f"dungeon_continue_{user_id}")]]
-                await query.edit_message_text(
-                    f"🛌 အနားယူပြီး HP +15 ပြန်ကောင်းလာတယ်!\n❤️ HP: {state['hp']}/{state.get('max_hp', 30)}",
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"🛌 အနားယူပြီး HP +15 ပြန်ကောင်းလာတယ်!\n❤️ HP: {state['hp']}/{state.get('max_hp', 30)}",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
         elif path_type == "merchant":
-            await handle_dungeon_event(chat_id, user_id, context, is_callback=True, target=query)
+            await handle_dungeon_event(chat_id, user_id, context, is_callback=False, target=None)
         return
-    
+        
     # dungeon_attack
     if data.startswith("dungeon_attack_"):
         monster = context.user_data.get(f"dungeon_monster_{user_id}")
