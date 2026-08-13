@@ -338,6 +338,34 @@ async def dungeon_callback(update, context):
         await handle_dungeon_event(chat_id, user_id, context, is_callback=False, target=None)
         return
     
+    # dungeon_path - 地牢岔路选择
+    if data.startswith("dungeon_path_"):
+        parts = data.split("_")
+        path_type = parts[2]
+        user_id = parts[3]
+        
+        if path_type == "combat":
+            await handle_dungeon_event(chat_id, user_id, context, is_callback=True, target=query)
+        elif path_type == "treasure":
+            await handle_dungeon_event(chat_id, user_id, context, is_callback=True, target=query)
+        elif path_type == "rest":
+            state = get_player_state(user_id)
+            if state:
+                state["hp"] = min(state.get("max_hp", 30), state.get("hp", 30) + 15)
+                states = load_game_states()
+                if states is None:
+                    states = {}
+                states[user_id] = state
+                save_game_states(states)
+                keyboard = [[InlineKeyboardButton("🚪 ဆက်သွားမယ်", callback_data=f"dungeon_continue_{user_id}")]]
+                await query.edit_message_text(
+                    f"🛌 အနားယူပြီး HP +15 ပြန်ကောင်းလာတယ်!\n❤️ HP: {state['hp']}/{state.get('max_hp', 30)}",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+        elif path_type == "merchant":
+            await handle_dungeon_event(chat_id, user_id, context, is_callback=True, target=query)
+        return
+    
     # dungeon_attack
     if data.startswith("dungeon_attack_"):
         monster = context.user_data.get(f"dungeon_monster_{user_id}")

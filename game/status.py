@@ -332,6 +332,33 @@ async def handle_dungeon_event(chat_id, user_id, context, is_callback=False, tar
         return
     
     floor = context.user_data.get(f"dungeon_floor_{user_id}", 1)
+    
+    # === 岔路选择（每3层出现一次，Boss层不出现） ===
+    if floor % 3 == 0 and floor > 1 and floor % 5 != 0:
+        keyboard = [
+            [InlineKeyboardButton("⚔️ ရန်သူများနှင့်တိုက်မည်", callback_data=f"dungeon_path_combat_{user_id}")],
+            [InlineKeyboardButton("💎 ရတနာရှာမည်", callback_data=f"dungeon_path_treasure_{user_id}")],
+            [InlineKeyboardButton("🛌 အနားယူမည်", callback_data=f"dungeon_path_rest_{user_id}")],
+            [InlineKeyboardButton("🏪 ကုန်သည်ကိုရှာမည်", callback_data=f"dungeon_path_merchant_{user_id}")],
+        ]
+        msg = (
+            f"🏰 *အထပ် {floor} - လမ်းဆုံ*\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"❤️ HP: {state.get('hp', 30)}/{state.get('max_hp', 30)}\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"ဘယ်လမ်းကိုသွားမလဲ?\n\n"
+            f"⚔️ ရန်သူများနှင့်တိုက်မည် → အတွေ့အကြုံများစွာရနိုင်\n"
+            f"💎 ရတနာရှာမည် → ရွှေနှင့်ပစ္စည်းများရနိုင်\n"
+            f"🛌 အနားယူမည် → HP ပြန်ဖြည့်ပေးမည်\n"
+            f"🏪 ကုန်သည်ကိုရှာမည် → ပစ္စည်းဝယ်နိုင်"
+        )
+        if is_callback and target:
+            await target.edit_message_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+
+    # === 原有随机事件逻辑 ===
     event_type = get_random_event()
     hp = state.get("hp", 30)
     max_hp = state.get("max_hp", 30)

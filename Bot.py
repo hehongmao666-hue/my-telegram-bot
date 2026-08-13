@@ -1,5 +1,5 @@
 # ==========================
-# bot.py - 入口文件（地牢升级版）
+# bot.py - 入口文件（地牢升级版 + 排行榜 + 签到）
 # ==========================
 
 import asyncio
@@ -27,9 +27,10 @@ from services.link import random_link_callback, back_to_menu_callback
 from services.active_member import active_member_listener
 
 # ============ Game ============
-from game.main import game_start, game_restart, game_back, dungeon_start
+from game.main import game_start, game_restart, game_back, dungeon_start, daily_checkin
 from game.status import game_status, game_shop
 from game.callback import shop_callback, game_callback, dungeon_callback
+from game.leaderboard import leaderboard, leaderboard_refresh_callback
 
 
 # ============ Check Schedule ============
@@ -100,6 +101,10 @@ def main():
     # ============ Dungeon Mode ============
     app.add_handler(CommandHandler("dungeon", dungeon_start))
 
+    # ============ Leaderboard & Checkin ============
+    app.add_handler(CommandHandler("leaderboard", leaderboard))
+    app.add_handler(CommandHandler("checkin", daily_checkin))
+
     # ============ Announcement ============
     app.add_handler(CommandHandler("announce", announce))
     app.add_handler(CommandHandler("stop_announce", stop_announce))
@@ -116,6 +121,9 @@ def main():
     
     # ============ Dungeon Callbacks ============
     app.add_handler(CallbackQueryHandler(dungeon_callback, pattern="^dungeon_"))
+    
+    # ============ Leaderboard Callbacks ============
+    app.add_handler(CallbackQueryHandler(leaderboard_refresh_callback, pattern="^leaderboard_refresh$"))
     
     # ============ Announcement Callbacks ============
     app.add_handler(CallbackQueryHandler(announce_callback, pattern="^announce_"))
@@ -135,6 +143,8 @@ def main():
     print("🚀 Myanmar Community Manager Bot Started")
     print("📊 Loaded commands. Owner-only functions active.")
     print("🎮 /dungeon - 地牢探险模式已加载！")
+    print("🏆 /leaderboard - 排行榜已加载！")
+    print("✅ /checkin - 每日签到已加载！")
 
     # 启动后台任务
     loop = asyncio.new_event_loop()

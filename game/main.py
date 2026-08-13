@@ -319,3 +319,82 @@ async def dungeon_start(update, context):
     )
     
     await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    # ==========================
+# 每日签到 - 添加到 game/main.py
+# ==========================
+
+import time
+from datetime import datetime, timedelta
+
+async def daily_checkin(update, context):
+    """每日签到"""
+    user_id = str(update.effective_user.id)
+    chat_id = update.effective_chat.id
+
+    states = load_game_states()
+    if states is None:
+        states = {}
+    if user_id not in states:
+        await update.message.reply_text("❌ ကျေးဇူးပြု၍ /game ဖြင့် ဇာတ်ကောင်ဖန်တီးပါ။")
+        return
+
+    now = int(time.time())
+
+    # 获取上次签到时间
+    last_checkin = states[user_id].get("last_checkin", 0)
+    checkin_streak = states[user_id].get("checkin_streak", 0)
+
+    # 检查是否今天已签到
+    last_date = datetime.fromtimestamp(last_checkin).strftime("%Y-%m-%d")
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    if last_date == today:
+        await update.message.reply_text("✅ ဒီနေ့ သင်ပြီးသွားပြီ။\nမနက်ဖြန်ပြန်လာခဲ့ပါ။")
+        return
+
+    # 检查是否连续签到
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    if last_date == yesterday:
+        checkin_streak += 1
+    else:
+        checkin_streak = 1
+
+    # 计算奖励
+    base_gold = 20
+    streak_bonus = min(checkin_streak // 3, 10) * 5  # 每3天+5金币，最多+10
+    bonus_gold = base_gold + streak_bonus
+
+    # 额外奖励：连续7天额外奖励
+    extra_bonus = 0
+    if checkin_streak % 7 == 0:
+        extra_bonus = 30
+        bonus_gold += extra_bonus
+
+    # 发放奖励
+    states[user_id]["gold"] = states[user_id].get("gold", 0) + bonus_gold
+    states[user_id]["last_checkin"] = now
+    states[user_id]["checkin_streak"] = checkin_streak
+    save_game_states(states)
+
+    # 构建消息
+    msg = f"✅ *နေ့စဉ်ဝင်ကစားခြင်း အောင်မြင်ပါပြီ!*\n\n"
+    msg += f"💰 ရရှိသောရွှေ: +{bonus_gold}\n"
+    msg += f"🔥 ဆက်တိုက်ဝင်ကစားမှု: {checkin_streak} ရက်\n"
+
+    if streak_bonus > 0:
+        msg += f"🎁 ဆက်တိုက်ဆုကြေး: +{streak_bonus}\n"
+    if extra_bonus > 0:
+        msg += f"🎉 ၇ ရက်ပြည့်ဆု: +{extra_bonus} 🎉\n"
+
+    msg += f"\n💰 လက်ရှိရွှေ: {states[user_id]['gold']}"
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
+    # 检查成就
+    if checkin_streak >= 7:
+        achievements = states[user_id].get("achievements", [])
+        if "🔥 ၇ ရက်ဆက်တိုက်ဝင်ကစားသူ" not in achievements:
+            achievements.append("🔥 ၇ ရက်ဆက်တိုက်ဝင်ကစားသူ")
+            states[user_id]["achievements"] = achievements
+            save_game_states(states)
+            await update.message.reply_text("🏅 *အောင်မြင်မှုရရှိပါပြီ!*\n🔥 ၇ ရက်ဆက်တိုက်ဝင်ကစားသူ")
