@@ -5,7 +5,7 @@
 import random
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from storage import load_game_states, save_game_states, get_player_state, load_data, save_data
-from game.scenes import LEVELS, LEVEL_SCENES
+from game.scenes import LEVELS, LEVEL_SCENES, get_dungeon_monster
 from game.main import get_or_create_player, reset_player_game
 from game.status import render_scene_with_send, handle_dungeon_event, calculate_damage
 from utils.logger import log_action
@@ -277,9 +277,10 @@ async def dungeon_callback(update, context):
     chat_id = query.message.chat.id
     data = query.data
     
+    # 尝试删除原消息
     try:
         await query.delete_message()
-    except Exception:
+    except:
         pass
     
     state = get_player_state(user_id)
@@ -338,41 +339,81 @@ async def dungeon_callback(update, context):
         await handle_dungeon_event(chat_id, user_id, context, is_callback=False, target=None)
         return
     
-    # dungeon_path - 地牢岔路选择
+    # dungeon_path - 地牢岔路选择（直接处理，不调用 handle_dungeon_event）
     if data.startswith("dungeon_path_"):
         parts = data.split("_")
         path_type = parts[2]
-        user_id = parts[3]
-        
-        # 先删除原消息（避免编辑已删除的消息）
-        try:
-            await query.delete_message()
-        except:
-            pass
         
         if path_type == "combat":
-            await handle_dungeon_event(chat_id, user_id, context, is_callback=False, target=None)
+            # 直接触发战斗
+            floor = context.user_data.get(f"dungeon_floor_{user_id}", 1)
+            monster = get_dungeon_monster(floor)
+            context.user_data[f"dungeon_monster_{user_id}"] = monster
+            
+            keyboard = [
+                [InlineKeyboardButton("⚔️ တိုက်မယ်", callback_data=f"dungeon_attack_{user_id}")],
+                [InlineKeyboardButton("🧪 ဆေးသုံးမယ်", callback_data=f"dungeon_potion_{user_id}")],
+                [InlineKeyboardButton("🏃 ထွက်ပြေးမယ်", callback_data=f"dungeon_flee_{user_id}")],
+            ]
+            
+            boss_tag = "👑 BOSS! " if monster.get("is_boss") else ""
+            msg = (
+                f"⚔️ *{boss_tag}{monster['name']} ကိုတွေ့လိုက်တယ်။*\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"❤️ {monster['name']} HP: {monster['hp']}  ⚔️ တိုက်: {monster['attack']}\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"❤️ မင်းရဲ့ HP: {state.get('hp', 30)}/{state.get('max_hp', 30)}\n\n"
+                f"ဘာလုပ်မလဲ။"
+            )
+            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+            
         elif path_type == "treasure":
-            await handle_dungeon_event(chat_id, user_id, context, is_callback=False, target=None)
+            # 直接触发宝箱（奖励翻倍）
+            floor = context.user_data.get(f"dungeon_floor_{user_id}", 1)
+            gold_gain = random.randint(10, 25) + floor * 2
+            state["gold"] = state.get("gold", 0) + gold_gain
+            states = load_game_states()
+            if states is None:
+                states = {}
+            states[user_id] = state
+            save_game_states(states)
+            
+            keyboard = [[InlineKeyboardButton("🚪 ဆက်သွားမယ်", callback_data=f"dungeon_continue_{user_id}")]]
+            msg = f"💎 ရတနာသေတ္တာတွေ့တယ်။ ရွှေ {gold_gain} ရတယ်။"
+            await context.bot.send_message(chat_id=chat_id, text=msg, reply_markup=InlineKeyboardMarkup(keyboard))
+            
         elif path_type == "rest":
-            state = get_player_state(user_id)
-            if state:
-                state["hp"] = min(state.get("max_hp", 30), state.get("hp", 30) + 15)
-                states = load_game_states()
-                if states is None:
-                    states = {}
-                states[user_id] = state
-                save_game_states(states)
-                keyboard = [[InlineKeyboardButton("🚪 ဆက်သွားမယ်", callback_data=f"dungeon_continue_{user_id}")]]
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=f"🛌 အနားယူပြီး HP +15 ပြန်ကောင်းလာတယ်!\n❤️ HP: {state['hp']}/{state.get('max_hp', 30)}",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
+            # 直接恢复 HP
+            state["hp"] = min(state.get("max_hp", 30), state.get("hp", 30) + 20)
+            states = load_game_states()
+            if states is None:
+                states = {}
+            states[user_id] = state
+            save_game_states(states)
+            
+            keyboard = [[InlineKeyboardButton("🚪 ဆက်သွားမယ်", callback_data=f"dungeon_continue_{user_id}")]]
+            msg = f"🛌 အနားယူပြီး HP +20 ပြန်ကောင်းလာတယ်!\n❤️ HP: {state['hp']}/{state.get('max_hp', 30)}"
+            await context.bot.send_message(chat_id=chat_id, text=msg, reply_markup=InlineKeyboardMarkup(keyboard))
+            
         elif path_type == "merchant":
-            await handle_dungeon_event(chat_id, user_id, context, is_callback=False, target=None)
+            # 直接触发商人
+            keyboard = [
+                [InlineKeyboardButton("🧪 ဆေးဝယ်မယ် (15ရွှေ)", callback_data=f"dungeon_buy_potion_{user_id}")],
+                [InlineKeyboardButton("⚔️ တိုက်ခိုက်စာလိပ် (25ရွှေ)", callback_data=f"dungeon_buy_attack_{user_id}")],
+                [InlineKeyboardButton("🚪 ဆက်သွားမယ်", callback_data=f"dungeon_continue_{user_id}")],
+            ]
+            msg = (
+                f"🏪 *လှည့်လည်ကုန်သည်*\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"💰 မင်းရဲ့ရွှေ: {state.get('gold', 0)}\n\n"
+                f"📦 ပစ္စည်းများ:\n"
+                f"🧪 အသက်ဆေး - 15ရွှေ (HP 10-20 ပြန်ကောင်း)\n"
+                f"⚔️ တိုက်ခိုက်စာလိပ် - 25ရွှေ (တိုက်ခိုက်အား +2 အမြဲတမ်း)"
+            )
+            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+            
         return
-        
+    
     # dungeon_attack
     if data.startswith("dungeon_attack_"):
         monster = context.user_data.get(f"dungeon_monster_{user_id}")
