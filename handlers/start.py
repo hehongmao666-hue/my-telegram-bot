@@ -221,7 +221,7 @@ async def help_about_callback(update, context):
     query = update.callback_query
     await query.answer()
     
-    text = "ℹ️ *About This Bot*\n"
+    text = "ℹ️ About This Bot\n"
     text += "━" * 18 + "\n\n"
     text += "🤖 Community Manager Bot\n"
     text += "A multi-purpose Telegram bot with:\n"
@@ -237,9 +237,9 @@ async def help_about_callback(update, context):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
-        await query.edit_message_text(text, parse_mode="Markdown", reply_markup=reply_markup)
+        await query.edit_message_text(text, parse_mode=None, reply_markup=reply_markup)
     except:
-        await query.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
+        await query.message.reply_text(text, parse_mode=None, reply_markup=reply_markup)
         
 
 async def help_back_callback(update, context):
