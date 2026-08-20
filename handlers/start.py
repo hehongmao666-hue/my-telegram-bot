@@ -20,11 +20,11 @@ async def start(update, context):
     log_action(user_id, username, "START", "用户启动Bot")
 
     keyboard = [
-        [InlineKeyboardButton("👥 ချစ်သူရှာမယ် Gp 1", url="https://t.me/Myanmar_GameFriendss")],
-        [InlineKeyboardButton("👥 ချစ်သူရှာမယ် Gp 2", url="https://t.me/Myanmar_GameFriends")],
-        [InlineKeyboardButton("🛒 Game Friend Shop ဆိုင် 1", url="https://t.me/PUBGUCshop_01")],
-        [InlineKeyboardButton("🎰 စလော့ နဲ့ Lottery ဂိမ်းများ(တီးမယ်)", callback_data="random_link")],
-        [InlineKeyboardButton("👤 အုံနာ ဆက်သွယ်ရန်", url="https://t.me/MCLP1_1")],
+        [InlineKeyboardButton("👥 ချစ်သူရှာမယ် Gp 1", url="https://t.me/Myanmar_GameFriendss", style="primary")],
+        [InlineKeyboardButton("👥 ချစ်သူရှာမယ် Gp 2", url="https://t.me/Myanmar_GameFriends", style="primary")],
+        [InlineKeyboardButton("🛒 Game Friend Shop ဆိုင် 1", url="https://t.me/PUBGUCshop_01", style="success")],
+        [InlineKeyboardButton("🎰 စလော့ နဲ့ Lottery ဂိမ်းများ(တီးမယ်)", callback_data="random_link", style="primary")],
+        [InlineKeyboardButton("👤 အုံနာ ဆက်သွယ်ရန်", url="https://t.me/MCLP1_1", style="danger")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -94,12 +94,12 @@ async def help(update, context):
     
     keyboard = [
         [
-            InlineKeyboardButton("🎮 Game", callback_data="help_game"),
-            InlineKeyboardButton("🏆 Leaderboard", callback_data="help_leaderboard"),
+            InlineKeyboardButton("🎮 Game", callback_data="help_game", style="primary"),
+            InlineKeyboardButton("🏆 Leaderboard", callback_data="help_leaderboard", style="primary"),
         ],
         [
-            InlineKeyboardButton("📢 Announcements", callback_data="help_announce"),
-            InlineKeyboardButton("ℹ️ About", callback_data="help_about"),
+            InlineKeyboardButton("📢 Announcements", callback_data="help_announce", style="primary"),
+            InlineKeyboardButton("ℹ️ About", callback_data="help_about", style="primary"),
         ],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -153,7 +153,7 @@ async def help_game_callback(update, context):
     text += "• Use potions wisely in tough battles\n"
     text += "• Check `/status` regularly to track your progress"
     
-    keyboard = [[InlineKeyboardButton("🔙 Back to Help", callback_data="help_back")]]
+    keyboard = [[InlineKeyboardButton("🔙 Back to Help", callback_data="help_back", style="danger")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
@@ -180,7 +180,7 @@ async def help_leaderboard_callback(update, context):
     text += "🥉 Total monsters defeated\n\n"
     text += "💡 Use `/leaderboard` anytime to check rankings!"
     
-    keyboard = [[InlineKeyboardButton("🔙 Back to Help", callback_data="help_back")]]
+    keyboard = [[InlineKeyboardButton("🔙 Back to Help", callback_data="help_back", style="danger")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
@@ -206,7 +206,7 @@ async def help_announce_callback(update, context):
     text += "• `/announce` - Send announcement\n"
     text += "• `/stop_announce` - Stop announcement"
     
-    keyboard = [[InlineKeyboardButton("🔙 Back to Help", callback_data="help_back")]]
+    keyboard = [[InlineKeyboardButton("🔙 Back to Help", callback_data="help_back", style="danger")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
@@ -232,7 +232,7 @@ async def help_about_callback(update, context):
     text += "👨‍💻 Developer: @MCLP1_1\n"
     text += "📅 Updated: August 2026"
     
-    keyboard = [[InlineKeyboardButton("🔙 Back to Help", callback_data="help_back")]]
+    keyboard = [[InlineKeyboardButton("🔙 Back to Help", callback_data="help_back", style="danger")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
@@ -298,12 +298,12 @@ async def help_back_callback(update, context):
     
     keyboard = [
         [
-            InlineKeyboardButton("🎮 Game", callback_data="help_game"),
-            InlineKeyboardButton("🏆 Leaderboard", callback_data="help_leaderboard"),
+            InlineKeyboardButton("🎮 Game", callback_data="help_game", style="primary"),
+            InlineKeyboardButton("🏆 Leaderboard", callback_data="help_leaderboard", style="primary"),
         ],
         [
-            InlineKeyboardButton("📢 Announcements", callback_data="help_announce"),
-            InlineKeyboardButton("ℹ️ About", callback_data="help_about"),
+            InlineKeyboardButton("📢 Announcements", callback_data="help_announce", style="primary"),
+            InlineKeyboardButton("ℹ️ About", callback_data="help_about", style="primary"),
         ],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)

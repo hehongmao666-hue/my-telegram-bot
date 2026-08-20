@@ -15,8 +15,8 @@ async def random_link_callback(update, context):
     selected_url = random.choice(RANDOM_LINKS)
 
     keyboard = [
-        [InlineKeyboardButton("🔗 နှိပ်ပြီးဝင်ရောက်ရန်(တီးမယ်)", url=selected_url)],
-        [InlineKeyboardButton("🔙 နောက်သို့ပြန်သွားရန်", callback_data="back_to_menu")],
+        [InlineKeyboardButton("🔗 နှိပ်ပြီးဝင်ရောက်ရန်(တီးမယ်)", url=selected_url, style="success")],
+        [InlineKeyboardButton("🔙 နောက်သို့ပြန်သွားရန်", callback_data="back_to_menu", style="danger")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -33,11 +33,11 @@ async def back_to_menu_callback(update, context):
     await query.answer()
 
     keyboard = [
-        [InlineKeyboardButton("👥 ချစ်သူရှာမယ် Gp 1", url="https://t.me/Myanmar_GameFriendss")],
-        [InlineKeyboardButton("👥 ချစ်သူရှာမယ် Gp 2", url="https://t.me/Myanmar_GameFriends")],
-        [InlineKeyboardButton("🛒 Game Friend Shop ဆိုင် 1", url="https://t.me/PUBGUCshop_01")],
-        [InlineKeyboardButton("🎰 စလော့ နဲ့ Lottery ဂိမ်းများ(တီးမယ်)", callback_data="random_link")],
-        [InlineKeyboardButton("👤 အုံနာ ဆက်သွယ်ရန်", url="https://t.me/MCLP1_1")],
+        [InlineKeyboardButton("👥 ချစ်သူရှာမယ် Gp 1", url="https://t.me/Myanmar_GameFriendss", style="primary")],
+        [InlineKeyboardButton("👥 ချစ်သူရှာမယ် Gp 2", url="https://t.me/Myanmar_GameFriends", style="primary")],
+        [InlineKeyboardButton("🛒 Game Friend Shop ဆိုင် 1", url="https://t.me/PUBGUCshop_01", style="success")],
+        [InlineKeyboardButton("🎰 စလော့ နဲ့ Lottery ဂိမ်းများ(တီးမယ်)", callback_data="random_link", style="primary")],
+        [InlineKeyboardButton("👤 အုံနာ ဆက်သွယ်ရန်", url="https://t.me/MCLP1_1", style="danger")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
