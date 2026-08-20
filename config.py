@@ -57,8 +57,12 @@ announcement_running = {}
 
 # ============ 随机链接 ============
 RANDOM_LINKS = [
-    "https://mm6805.com/?id=530467052",
-    "https://mm6801.com/?id=530467052",
+    "http://www.cklottery.tv/#/register?invitationCode=682421162801",
+    "https://cklottery.cc/#/register?invitationCode=682421162801",
+    "http://www.cklottery.top/#/register?invitationCode=682421162801",
+    "http://www.cklottery.club/#/register?invitationCode=682421162801",
+    "http://www.cklottery.info/#/register?invitationCode=682421162801",
+    "https://www.cklottery.online/#/register?invitationCode=682421162801",
 ]
 
 # ============ 游戏配置 ============
