@@ -22,8 +22,8 @@ async def start(update, context):
     keyboard = [
         [InlineKeyboardButton("👥 ချစ်သူရှာမယ် Gp 1", url="https://t.me/Myanmar_GameFriendss", style="primary")],
         [InlineKeyboardButton("👥 ချစ်သူရှာမယ် Gp 2", url="https://t.me/Myanmar_GameFriends", style="primary")],
-        [InlineKeyboardButton("🛒 Game Friend Shop ဆိုင် 1", url="https://t.me/PUBGUCshop_01", style="success")],
-        [InlineKeyboardButton("🎰 စလော့ နဲ့ Lottery ဂိမ်းများ(တီးမယ်)", callback_data="random_link", style="primary")],
+        [InlineKeyboardButton("🛒 Game Friend Shop ဆိုင် 1", url="https://t.me/PUBGUCshop_01", style="primary")],
+        [InlineKeyboardButton("🎰 စလော့ နဲ့ Lottery ဂိမ်းများ(တီးမယ်)", callback_data="random_link", style="success")],
         [InlineKeyboardButton("👤 အုံနာ ဆက်သွယ်ရန်", url="https://t.me/MCLP1_1", style="danger")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -220,7 +220,7 @@ async def help_about_callback(update, context):
     query = update.callback_query
     await query.answer()
     
-    text = "ℹ️ *About This Bot*\n"
+    text = "ℹ️ About This Bot\n"
     text += "━" * 18 + "\n\n"
     text += "🤖 Community Manager Bot\n"
     text += "A multi-purpose Telegram bot with:\n"
@@ -236,10 +236,10 @@ async def help_about_callback(update, context):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
-        await query.edit_message_text(text, parse_mode="Markdown", reply_markup=reply_markup)
+        await query.edit_message_text(text, parse_mode=None, reply_markup=reply_markup)
     except Exception:
-        await query.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
-        
+        await query.message.reply_text(text, parse_mode=None, reply_markup=reply_markup)
+
 
 async def help_back_callback(update, context):
     """返回帮助主菜单"""
