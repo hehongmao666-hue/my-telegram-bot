@@ -132,7 +132,11 @@ async def count(update, context):
 async def help_game_callback(update, context):
     """帮助 - 游戏说明"""
     query = update.callback_query
-    await query.answer()
+    
+    try:
+        await query.answer()
+    except Exception:
+        pass
     
     text = "🎮 *Game Guide*\n"
     text += "━" * 18 + "\n\n"
@@ -165,7 +169,11 @@ async def help_game_callback(update, context):
 async def help_leaderboard_callback(update, context):
     """帮助 - 排行榜说明"""
     query = update.callback_query
-    await query.answer()
+    
+    try:
+        await query.answer()
+    except Exception:
+        pass
     
     text = "🏆 *Leaderboard*\n"
     text += "━" * 18 + "\n\n"
@@ -192,7 +200,11 @@ async def help_leaderboard_callback(update, context):
 async def help_announce_callback(update, context):
     """帮助 - 公告说明"""
     query = update.callback_query
-    await query.answer()
+    
+    try:
+        await query.answer()
+    except Exception:
+        pass
     
     text = "📢 *Announcements*\n"
     text += "━" * 18 + "\n\n"
@@ -218,7 +230,11 @@ async def help_announce_callback(update, context):
 async def help_about_callback(update, context):
     """帮助 - 关于"""
     query = update.callback_query
-    await query.answer()
+    
+    try:
+        await query.answer()
+    except Exception:
+        pass
     
     text = "ℹ️ About This Bot\n"
     text += "━" * 18 + "\n\n"
@@ -244,7 +260,11 @@ async def help_about_callback(update, context):
 async def help_back_callback(update, context):
     """返回帮助主菜单"""
     query = update.callback_query
-    await query.answer()
+    
+    try:
+        await query.answer()
+    except Exception:
+        pass
     
     user_id = query.from_user.id
     is_admin = user_id in ADMIN_IDS
