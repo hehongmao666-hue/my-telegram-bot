@@ -227,18 +227,26 @@ async def stop_announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_key = str(chat_id)
 
     if user_id not in ADMIN_IDS:
-        await update.message.reply_text("⛔️ သင်တွင် ဤ command ကို အသုံးပြုခွင့်မရှိပါ။")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="⛔️ သင်တွင် ဤ command ကို အသုံးပြုခွင့်မရှိပါ။"
+        )
         return
 
-    # 检查是否有公告在运行
     if not announcement_running.get(chat_key, False):
-        await update.message.reply_text("ℹ️ လက်ရှိ ကြေငြာတစ်ခုမှ ပို့နေခြင်းမရှိပါ။")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="ℹ️ လက်ရှိ ကြေငြာတစ်ခုမှ ပို့နေခြင်းမရှိပါ။"
+        )
         return
 
-    # 设置停止标志
     announcement_running[chat_key] = False
-    await update.message.reply_text("🛑 ကြေငြာကို ရပ်လိုက်ပါပြီ။")
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text="🛑 ကြေငြာကို ရပ်လိုက်ပါပြီ။"
+    )
     logger.info(f"[Announcement] Stopped by user: {user_id} | Chat: {chat_id}")
+
 
 async def announce_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """公告按钮回调"""
