@@ -226,6 +226,8 @@ async def stop_announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     chat_key = str(chat_id)
 
+    logger.info(f"[stop_announce] Called by user: {user_id} | chat_key: {chat_key} | running: {announcement_running.get(chat_key, False)}")
+
     if user_id not in ADMIN_IDS:
         await context.bot.send_message(
             chat_id=chat_id,
