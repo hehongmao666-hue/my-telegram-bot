@@ -1,231 +1,449 @@
 # ==========================
-# handlers/broadcast.py - 广播/转发功能
+# handlers/broadcast.py - 广播/转发功能（非阻塞版）
 # ==========================
 
 import asyncio
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from storage import load_data, save_data, add_user, add_group
-from utils.logger import log_action, log_error, log_broadcast
+from telegram import Update
+from telegram.ext import ContextTypes
+from config import ADMIN_IDS
+from storage import load_data, save_data
+from utils.logger import logger, log_action
 from utils.helpers import get_user_info, owner_only
 
 
-async def send(update, context):
-    if not await owner_only(update):
+async def send(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """发送消息到当前聊天（仅管理员）"""
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔️ သင်တွင် ဤ command ကို အသုံးပြုခွင့်မရှိပါ။")
         return
-    text = ' '.join(context.args)
+
+    text = " ".join(context.args)
     if not text:
-        await update.message.reply_text("📝 အသုံးပြုပုံ: /send [စာသား]\nHTML သုံးနိုင်သည်: <b>လုံးထူ</b> <i>စောင်း</i> <a href='url'>လင့်</a>")
+        await update.message.reply_text("📝 /send [စာသား]")
         return
 
-    user_id, username = get_user_info(update)
-    log_action(user_id, username, "SEND", f"发送到当前聊天: {text[:50]}...")
-
-    keyboard = [[InlineKeyboardButton("🎮 Channel သို့သွားရန်", url="https://t.me/Myanmar_GameFriendss")]]
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=f"📢 {text}",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    await update.message.reply_text("✅ ပို့ပြီးပါပြီ။")
+    await context.bot.send_message(chat_id=chat_id, text=text)
 
 
-async def broadcast(update, context):
-    if not await owner_only(update):
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """广播消息给所有用户（后台运行）"""
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔️ သင်တွင် ဤ command ကို အသုံးပြုခွင့်မရှိပါ။")
         return
-    text = ' '.join(context.args)
+
+    text = " ".join(context.args)
     if not text:
-        await update.message.reply_text("📝 အသုံးပြုပုံ: /broadcast [စာသား]\nHTML သုံးနိုင်သည်။")
+        await update.message.reply_text("📝 /broadcast [စာသား]")
         return
 
-    user_id, username = get_user_info(update)
-    log_action(user_id, username, "BROADCAST_START", f"广播内容: {text[:50]}...")
-
-    await do_broadcast(update, context, text, "text")
+    # ✅ 在后台运行广播任务
+    asyncio.create_task(_run_broadcast(update, context, chat_id, text))
 
 
-async def broadcast_image(update, context):
-    if not await owner_only(update):
+async def _run_broadcast(update, context, chat_id, text):
+    """后台运行广播"""
+    try:
+        data = load_data()
+        targets = list(set(data.get("users", []) + data.get("groups", [])))
+        targets = [t for t in targets if t not in data.get("blacklist", [])]
+
+        if not targets:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="ℹ️ ပို့ပေးရန် ပစ်မှတ်မရှိပါ။"
+            )
+            return
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"⏳ မက်ဆေ့ခ်ျကို {len(targets)} ဦးထံ ပို့နေပါသည်..."
+        )
+
+        success_count = 0
+        fail_count = 0
+
+        for idx, target in enumerate(targets):
+            if idx % 10 == 0:
+                await asyncio.sleep(0)
+
+            try:
+                await context.bot.send_message(chat_id=target, text=text)
+                success_count += 1
+            except Exception:
+                fail_count += 1
+
+            await asyncio.sleep(0.05)
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"✅ မက်ဆေ့ခ်ျကို အားလုံးသို့ ပို့ပြီးပါပြီ။\n"
+                 f"📊 အောင်မြင်: {success_count}\n"
+                 f"❌ မအောင်မြင်: {fail_count}"
+        )
+
+        user_id_int, username = get_user_info(update)
+        log_action(
+            user_id_int, username,
+            "BROADCAST",
+            f"广播: {text[:30]}... | 成功: {success_count}/{len(targets)}"
+        )
+
+    except Exception as e:
+        logger.exception("[Broadcast] Error")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"❌ အမှားရှိသည်: {e}"
+        )
+
+
+async def broadcast_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """广播图片给所有用户（后台运行）"""
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+    message = update.message
+
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔️ သင်တွင် ဤ command ကို အသုံးပြုခွင့်မရှိပါ။")
         return
-    if not update.message.reply_to_message or not update.message.reply_to_message.photo:
-        await update.message.reply_text("📸 ဓာတ်ပုံတစ်ပုံကို reply လုပ်ပြီး /broadcast_image [စာသား] ထည့်ပါ။")
+
+    if not message.reply_to_message or not message.reply_to_message.photo:
+        await update.message.reply_text("📝 ဓာတ်ပုံကို Reply လုပ်ပြီး /broadcast_image ထည့်ပါ။")
         return
 
-    user_id, username = get_user_info(update)
-    log_action(user_id, username, "BROADCAST_IMAGE", "广播图片")
+    caption = " ".join(context.args) if context.args else ""
 
-    caption = ' '.join(context.args) or " "
-    photo = update.message.reply_to_message.photo[-1].file_id
-    await do_broadcast(update, context, caption, "image", photo)
+    # ✅ 在后台运行广播任务
+    asyncio.create_task(_run_broadcast_image(update, context, chat_id, message, caption))
 
 
-async def broadcast_group(update, context):
-    if not await owner_only(update):
+async def _run_broadcast_image(update, context, chat_id, message, caption):
+    """后台运行图片广播"""
+    try:
+        data = load_data()
+        targets = list(set(data.get("users", []) + data.get("groups", [])))
+        targets = [t for t in targets if t not in data.get("blacklist", [])]
+
+        if not targets:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="ℹ️ ပို့ပေးရန် ပစ်မှတ်မရှိပါ။"
+            )
+            return
+
+        photo = message.reply_to_message.photo[-1].file_id
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"⏳ ဓာတ်ပုံကို {len(targets)} ဦးထံ ပို့နေပါသည်..."
+        )
+
+        success_count = 0
+        fail_count = 0
+
+        for idx, target in enumerate(targets):
+            if idx % 10 == 0:
+                await asyncio.sleep(0)
+
+            try:
+                await context.bot.send_photo(chat_id=target, photo=photo, caption=caption)
+                success_count += 1
+            except Exception:
+                fail_count += 1
+
+            await asyncio.sleep(0.05)
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"✅ ဓာတ်ပုံကို အားလုံးသို့ ပို့ပြီးပါပြီ။\n"
+                 f"📊 အောင်မြင်: {success_count}\n"
+                 f"❌ မအောင်မြင်: {fail_count}"
+        )
+
+        user_id_int, username = get_user_info(update)
+        log_action(
+            user_id_int, username,
+            "BROADCAST_IMAGE",
+            f"广播图片 | 成功: {success_count}/{len(targets)}"
+        )
+
+    except Exception as e:
+        logger.exception("[BroadcastImage] Error")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"❌ အမှားရှိသည်: {e}"
+        )
+
+
+async def broadcast_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """广播到所有群组（后台运行）"""
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔️ သင်တွင် ဤ command ကို အသုံးပြုခွင့်မရှိပါ။")
         return
-    text = ' '.join(context.args)
+
+    text = " ".join(context.args)
     if not text:
-        await update.message.reply_text("📝 အသုံးပြုပုံ: /broadcast_group [စာသား]")
+        await update.message.reply_text("📝 /broadcast_group [စာသား]")
         return
 
-    user_id, username = get_user_info(update)
-    log_action(user_id, username, "BROADCAST_GROUP", f"广播到群组: {text[:50]}...")
+    asyncio.create_task(_run_broadcast_group(update, context, chat_id, text))
 
-    data = load_data()
-    targets = [g for g in data["groups"] if g not in data.get("blacklist", [])]
-    if not targets:
-        await update.message.reply_text("အုပ်စုမတွေ့ပါ။")
+
+async def _run_broadcast_group(update, context, chat_id, text):
+    """后台运行群组广播"""
+    try:
+        data = load_data()
+        targets = [g for g in data.get("groups", []) if g not in data.get("blacklist", [])]
+
+        if not targets:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="ℹ️ ပို့ပေးရန် အုပ်စုမရှိပါ။"
+            )
+            return
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"⏳ မက်ဆေ့ခ်ျကို အုပ်စု {len(targets)} ခုထံ ပို့နေပါသည်..."
+        )
+
+        success_count = 0
+        fail_count = 0
+
+        for idx, target in enumerate(targets):
+            if idx % 10 == 0:
+                await asyncio.sleep(0)
+
+            try:
+                await context.bot.send_message(chat_id=target, text=text)
+                success_count += 1
+            except Exception:
+                fail_count += 1
+
+            await asyncio.sleep(0.05)
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"✅ မက်ဆေ့ခ်ျကို အုပ်စုများသို့ ပို့ပြီးပါပြီ။\n"
+                 f"📊 အောင်မြင်: {success_count}\n"
+                 f"❌ မအောင်မြင်: {fail_count}"
+        )
+
+    except Exception as e:
+        logger.exception("[BroadcastGroup] Error")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"❌ အမှားရှိသည်: {e}"
+        )
+
+
+async def broadcast_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """广播到所有用户（后台运行）"""
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔️ သင်တွင် ဤ command ကို အသုံးပြုခွင့်မရှိပါ။")
         return
-    await send_to_targets(update, context, targets, text, "text")
 
-
-async def broadcast_user(update, context):
-    if not await owner_only(update):
-        return
-    text = ' '.join(context.args)
+    text = " ".join(context.args)
     if not text:
-        await update.message.reply_text("📝 အသုံးပြုပုံ: /broadcast_user [စာသား]")
+        await update.message.reply_text("📝 /broadcast_user [စာသား]")
         return
 
-    user_id, username = get_user_info(update)
-    log_action(user_id, username, "BROADCAST_USER", f"广播到用户: {text[:50]}...")
+    asyncio.create_task(_run_broadcast_user(update, context, chat_id, text))
 
-    data = load_data()
-    targets = [u for u in data["users"] if u not in data.get("blacklist", [])]
-    if not targets:
-        await update.message.reply_text("အသုံးပြုသူမတွေ့ပါ။")
+
+async def _run_broadcast_user(update, context, chat_id, text):
+    """后台运行用户广播"""
+    try:
+        data = load_data()
+        targets = [u for u in data.get("users", []) if u not in data.get("blacklist", [])]
+
+        if not targets:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="ℹ️ ပို့ပေးရန် အသုံးပြုသူမရှိပါ။"
+            )
+            return
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"⏳ မက်ဆေ့ခ်ျကို အသုံးပြုသူ {len(targets)} ဦးထံ ပို့နေပါသည်..."
+        )
+
+        success_count = 0
+        fail_count = 0
+
+        for idx, target in enumerate(targets):
+            if idx % 10 == 0:
+                await asyncio.sleep(0)
+
+            try:
+                await context.bot.send_message(chat_id=target, text=text)
+                success_count += 1
+            except Exception:
+                fail_count += 1
+
+            await asyncio.sleep(0.05)
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"✅ မက်ဆေ့ခ်ျကို အသုံးပြုသူများသို့ ပို့ပြီးပါပြီ။\n"
+                 f"📊 အောင်မြင်: {success_count}\n"
+                 f"❌ မအောင်မြင်: {fail_count}"
+        )
+
+    except Exception as e:
+        logger.exception("[BroadcastUser] Error")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"❌ အမှားရှိသည်: {e}"
+        )
+
+
+async def forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """转发消息到指定 Chat ID（后台运行）"""
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+    message = update.message
+
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔️ သင်တွင် ဤ command ကို အသုံးပြုခွင့်မရှိပါ။")
         return
-    await send_to_targets(update, context, targets, text, "text")
 
-
-async def do_broadcast(update, context, text, msg_type, file_id=None):
-    data = load_data()
-    targets = list(set(data["users"] + data["groups"]))
-    targets = [t for t in targets if t not in data.get("blacklist", [])]
-    if not targets:
-        await update.message.reply_text("ပို့ရန်ပစ်မှတ်မရှိပါ။")
-        return
-    await send_to_targets(update, context, targets, text, msg_type, file_id)
-
-
-async def send_to_targets(update, context, targets, text, msg_type, file_id=None):
-    user_id, username = get_user_info(update)
-
-    if update.effective_chat.type != "private":
-        await context.bot.send_message(chat_id=OWNER_ID, text=f"⏳ ပို့နေသည်... ပစ်မှတ် {len(targets)} ခုသို့")
-
-    msg = await update.message.reply_text(f"⏳ ပို့နေသည်... {len(targets)} ခုသို့")
-    sent, failed = 0, 0
-    keyboard = [[InlineKeyboardButton("🎮 Channel သို့သွားရန်", url="https://t.me/Myanmar_GameFriendss")]]
-    markup = InlineKeyboardMarkup(keyboard)
-
-    for target in targets:
-        try:
-            if msg_type == "text":
-                await context.bot.send_message(chat_id=target, text=f"📢 {text}", parse_mode="HTML", reply_markup=markup)
-            elif msg_type == "image":
-                await context.bot.send_photo(chat_id=target, photo=file_id, caption=f"📢 {text}", parse_mode="HTML", reply_markup=markup)
-            sent += 1
-            await asyncio.sleep(0.1)
-        except Exception:
-            failed += 1
-
-    log_broadcast("SEND_TO_TARGETS", len(targets), f"成功: {sent}, 失败: {failed}, 类型: {msg_type}")
-
-    await msg.edit_text(f"✅ ပြီးပါပြီ။\nပို့ပြီး: {sent}\nမအောင်မြင်: {failed}")
-    if update.effective_chat.type != "private":
-        await context.bot.send_message(chat_id=OWNER_ID, text=f"✅ ပြီးပါပြီ။\nပို့ပြီး: {sent}\nမအောင်မြင်: {failed}")
-
-
-async def forward(update, context):
-    if not await owner_only(update):
-        return
-
-    user_id, username = get_user_info(update)
-
-    if not update.message:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="❌ ဤ command ကို ဤနေရာတွင် မသုံးနိုင်ပါ။")
-        return
-
-    if not update.message.reply_to_message:
-        await update.message.reply_text("📝 မက်ဆေ့ခ်ျတစ်ခုကို reply လုပ်ပြီး /forward [Chat ID] ထည့်ပါ။")
+    if not message.reply_to_message:
+        await update.message.reply_text(
+            "📝 အသုံးပြုပုံ:\n"
+            "/forward [Chat ID] - မက်ဆေ့ခ်ျကို Reply လုပ်ပြီး command ထည့်ပါ။"
+        )
         return
 
     args = context.args
     if not args:
-        await update.message.reply_text("📝 Chat ID ထည့်ပါ။\nဥပမာ: /forward -100123456789")
+        await update.message.reply_text("❌ ကျေးဇူးပြု၍ Chat ID ထည့်ပါ။\n例如: /forward -100123456789")
         return
 
-    target_id = args[0]
-    try:
-        target_id = int(target_id)
-    except ValueError:
-        await update.message.reply_text("❌ Chat ID မှားနေသည်။")
-        return
+    target_chat_id = args[0]
+    reply_msg = message.reply_to_message
 
-    log_action(user_id, username, "FORWARD", f"转发到 Chat ID: {target_id}")
+    asyncio.create_task(_run_forward(update, context, chat_id, target_chat_id, reply_msg))
 
-    reply_msg = update.message.reply_to_message
 
+async def _run_forward(update, context, chat_id, target_chat_id, reply_msg):
+    """后台运行转发"""
     try:
         await context.bot.forward_message(
-            chat_id=target_id,
+            chat_id=target_chat_id,
             from_chat_id=reply_msg.chat.id,
             message_id=reply_msg.message_id
         )
-        await update.message.reply_text(f"✅ Chat ID {target_id} သို့ ပြန်ပို့ပြီးပါပြီ။")
-        log_action(user_id, username, "FORWARD_SUCCESS", f"目标: {target_id}")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"✅ မက်ဆေ့ခ်ျကို {target_chat_id} သို့ ပြန်ပို့ပြီးပါပြီ။"
+        )
+        logger.info(f"[Forward] User: {update.effective_user.id} | To: {target_chat_id}")
     except Exception as e:
-        log_error(user_id, username, "FORWARD_FAILED", str(e))
-        await update.message.reply_text(f"❌ ပြန်ပို့မအောင်မြင်: {e}")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"❌ ပြန်ပို့ရာတွင် အမှားရှိသည်: {e}"
+        )
+        logger.error(f"[Forward] Error: {e}")
 
 
-async def forward_all(update, context):
-    if not await owner_only(update):
+async def forward_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """转发消息给所有用户（后台运行）"""
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+    message = update.message
+
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔️ သင်တွင် ဤ command ကို အသုံးပြုခွင့်မရှိပါ။")
         return
 
-    user_id, username = get_user_info(update)
-
-    if not update.message:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="❌ ဤ command ကို ဤနေရာတွင် မသုံးနိုင်ပါ။")
+    if not message.reply_to_message:
+        await update.message.reply_text(
+            "📝 အသုံးပြုပုံ:\n"
+            "မက်ဆေ့ခ်ျကို Reply လုပ်ပြီး /forward_all ထည့်ပါ။"
+        )
         return
 
-    log_action(user_id, username, "FORWARD_ALL", "转发给所有人")
+    reply_msg = message.reply_to_message
 
-    if not update.message.reply_to_message:
-        await update.message.reply_text("📝 မက်ဆေ့ခ်ျတစ်ခုကို reply လုပ်ပြီး /forward_all ထည့်ပါ။")
-        return
+    asyncio.create_task(_run_forward_all(update, context, chat_id, reply_msg))
 
-    data = load_data()
-    targets = list(set(data["users"] + data["groups"]))
-    targets = [t for t in targets if t not in data.get("blacklist", [])]
 
-    if not targets:
-        await update.message.reply_text("❌ ပြန်ပို့ရန် ပစ်မှတ်မရှိပါ။")
-        return
+async def _run_forward_all(update, context, chat_id, reply_msg):
+    """后台运行转发给所有用户"""
+    try:
+        data = load_data()
+        targets = list(set(data.get("users", []) + data.get("groups", [])))
+        targets = [t for t in targets if t not in data.get("blacklist", [])]
 
-    reply_msg = update.message.reply_to_message
-    msg = await update.message.reply_text(f"⏳ ပြန်ပို့နေသည်... {len(targets)} ခုသို့")
-
-    sent = 0
-    failed = 0
-
-    for target in targets:
-        try:
-            await context.bot.forward_message(
-                chat_id=target,
-                from_chat_id=reply_msg.chat.id,
-                message_id=reply_msg.message_id
+        if not targets:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="ℹ️ ပို့ပေးရန် ပစ်မှတ်မရှိပါ။"
             )
-            sent += 1
-            await asyncio.sleep(0.1)
-        except Exception:
-            failed += 1
+            return
 
-    log_broadcast("FORWARD_ALL", len(targets), f"成功: {sent}, 失败: {failed}")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"⏳ မက်ဆေ့ခ်ျကို {len(targets)} ဦးထံ ပို့နေပါသည်..."
+        )
 
-    await msg.edit_text(
-        f"✅ ပြန်ပို့ပြီးပါပြီ။\n"
-        f"အောင်မြင်: {sent}\n"
-        f"မအောင်မြင်: {failed}\n"
-        f"စုစုပေါင်း: {len(targets)}"
-    )
+        success_count = 0
+        fail_count = 0
+
+        for idx, target in enumerate(targets):
+            if idx % 10 == 0:
+                await asyncio.sleep(0)
+
+            try:
+                await context.bot.forward_message(
+                    chat_id=target,
+                    from_chat_id=reply_msg.chat.id,
+                    message_id=reply_msg.message_id
+                )
+                success_count += 1
+            except Exception:
+                fail_count += 1
+
+            if idx % 50 == 0 and idx > 0:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"📊 {idx}/{len(targets)} ဦးထံ ပို့ပြီးပါပြီ။"
+                )
+
+            await asyncio.sleep(0.05)
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"✅ မက်ဆေ့ခ်ျကို အားလုံးသို့ ပြန်ပို့ပြီးပါပြီ။\n"
+                 f"📊 အောင်မြင်: {success_count}\n"
+                 f"❌ မအောင်မြင်: {fail_count}"
+        )
+
+        logger.info(f"[ForwardAll] User: {update.effective_user.id} | Success: {success_count}, Failed: {fail_count}, Total: {len(targets)}")
+
+        user_id_int, username = get_user_info(update)
+        log_action(
+            user_id_int, username,
+            "FORWARD_ALL",
+            f"转发消息 | 成功: {success_count}/{len(targets)}"
+        )
+
+    except Exception as e:
+        logger.exception("[ForwardAll] Error")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"❌ အမှားရှိသည်: {e}"
+        )

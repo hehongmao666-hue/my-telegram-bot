@@ -1,5 +1,5 @@
 # ==========================
-# handlers/announce.py - 公告指令处理（V3.1 完整修复版）
+# handlers/announce.py - 公告指令处理（V3.2 非阻塞版）
 # ==========================
 
 import asyncio
@@ -27,7 +27,6 @@ async def announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     message = update.message
 
-    # ========== 权限检查 ==========
     if user_id not in ADMIN_IDS:
         await context.bot.send_message(
             chat_id=chat_id,
@@ -35,7 +34,6 @@ async def announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # ========== 私聊检查 ==========
     if update.effective_chat.type == "private":
         await context.bot.send_message(
             chat_id=chat_id,
@@ -43,12 +41,10 @@ async def announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # ========== 检查是否回复了消息（复制消息模式） ==========
     if message and message.reply_to_message:
         await handle_announce_copy(update, context, message, chat_id)
         return
 
-    # ========== 文本模式 ==========
     text = " ".join(context.args) if context.args else ""
     if not text:
         await context.bot.send_message(
@@ -63,7 +59,7 @@ async def announce(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_announce_text(update, context, message, chat_id, text):
-    """处理文本公告"""
+    """处理文本公告 - 后台运行"""
     chat_key = str(chat_id)
     
     if announcement_running.get(chat_key, False):
@@ -75,6 +71,14 @@ async def handle_announce_text(update, context, message, chat_id, text):
 
     announcement_running[chat_key] = True
 
+    # ✅ 在后台任务中运行，不阻塞主事件循环
+    asyncio.create_task(_run_announcement(update, context, chat_id, text))
+
+
+async def _run_announcement(update, context, chat_id, text):
+    """后台运行公告"""
+    chat_key = str(chat_id)
+    
     try:
         from storage import get_active_members
         members = get_active_members(chat_id, days=30)
@@ -90,12 +94,10 @@ async def handle_announce_text(update, context, message, chat_id, text):
             )
             return
 
-        # ========== 发送公告头部 ==========
         header = build_announcement_header(text)
         await context.bot.send_message(chat_id=chat_id, text=header)
         logger.info(f"[Announcement] Header Sent")
 
-        # ========== 发送 @ 列表 ==========
         stats = await send_mentions(
             context=context,
             chat_id=chat_id,
@@ -103,7 +105,6 @@ async def handle_announce_text(update, context, message, chat_id, text):
             stop_flag=announcement_running
         )
 
-        # ========== 发送完成消息 ==========
         finish_text = build_finish_message(
             success=stats["success"],
             total=total,
@@ -163,7 +164,6 @@ async def handle_announce_copy(update, context, message, chat_id):
             )
             return
 
-        # ========== 发送公告头部（使用复制的消息） ==========
         reply_msg = message.reply_to_message
 
         try:
@@ -180,7 +180,6 @@ async def handle_announce_copy(update, context, message, chat_id):
             )
             await context.bot.send_message(chat_id=chat_id, text=header)
 
-        # ========== 发送 @ 列表 ==========
         stats = await send_mentions(
             context=context,
             chat_id=chat_id,
@@ -188,7 +187,6 @@ async def handle_announce_copy(update, context, message, chat_id):
             stop_flag=announcement_running
         )
 
-        # ========== 发送完成消息 ==========
         finish_text = build_finish_message(
             success=stats["success"],
             total=total,

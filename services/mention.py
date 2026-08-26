@@ -1,5 +1,5 @@
 # ==========================
-# services/mention.py - 公告核心逻辑（V3.2 修复限流）
+# services/mention.py - 公告核心逻辑（V3.3 非阻塞版）
 # ==========================
 
 import asyncio
@@ -24,7 +24,7 @@ def split_members(members: list, batch_size: int = MENTION_BATCH_SIZE) -> List[L
 
 
 def build_html_mentions(members: List[Dict]) -> str:
-    """生成 HTML 格式的 @ 列表，每批随机排列 Emoji"""
+    """生成 HTML 格式的 @ 列表"""
     if not members:
         return ""
 
@@ -68,7 +68,7 @@ async def send_mentions(
     delay: float = 1.5,
     stop_flag: dict = None
 ) -> Dict[str, int]:
-    """分批发送 @ 消息（支持立即停止）"""
+    """分批发送 @ 消息（非阻塞版）"""
     if not members:
         return {"success": 0, "failed": 0, "skipped": 0}
 
@@ -97,7 +97,7 @@ async def send_mentions(
     logger.info(f"[Announcement] Total {len(batch_data)} batches, {len(members)} members")
 
     for data in batch_data:
-        # ✅ 每批发送前检查停止标志
+        # 检查停止标志
         if stop_flag is not None and not stop_flag.get(chat_key, False):
             logger.info(f"[Announcement] Stopped by user at batch {data['batch_num']}")
             break
@@ -110,7 +110,6 @@ async def send_mentions(
 
         max_retries = 3
         for attempt in range(max_retries):
-            # ✅ 重试前也检查停止标志
             if stop_flag is not None and not stop_flag.get(chat_key, False):
                 logger.info(f"[Announcement] Stopped during retry at batch {data['batch_num']}")
                 return stats
@@ -143,7 +142,9 @@ async def send_mentions(
                     logger.error(f"[Announcement] Batch {data['batch_num']} failed: {e}")
                     break
 
-        # ✅ 睡眠期间也检查停止标志
+        # ✅ 让出控制权，允许其他任务运行
+        await asyncio.sleep(0)
+
         if delay > 0:
             sleep_steps = int(delay / 0.2)
             for _ in range(sleep_steps):
