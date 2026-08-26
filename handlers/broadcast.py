@@ -42,7 +42,6 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📝 /broadcast [စာသား]")
         return
 
-    # ✅ 在后台运行广播任务
     asyncio.create_task(_run_broadcast(update, context, chat_id, text))
 
 
@@ -118,7 +117,6 @@ async def broadcast_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     caption = " ".join(context.args) if context.args else ""
 
-    # ✅ 在后台运行广播任务
     asyncio.create_task(_run_broadcast_image(update, context, chat_id, message, caption))
 
 
@@ -443,6 +441,54 @@ async def _run_forward_all(update, context, chat_id, reply_msg):
 
     except Exception as e:
         logger.exception("[ForwardAll] Error")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"❌ အမှားရှိသည်: {e}"
+        )
+
+
+# ============ 兼容旧代码 ============
+
+async def do_broadcast(context, chat_id, text):
+    """
+    兼容旧代码的广播函数
+    用于 preset.py 调用
+    """
+    try:
+        data = load_data()
+        targets = list(set(data.get("users", []) + data.get("groups", [])))
+        targets = [t for t in targets if t not in data.get("blacklist", [])]
+
+        if not targets:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="ℹ️ ပို့ပေးရန် ပစ်မှတ်မရှိပါ။"
+            )
+            return
+
+        success_count = 0
+        fail_count = 0
+
+        for idx, target in enumerate(targets):
+            if idx % 10 == 0:
+                await asyncio.sleep(0)
+
+            try:
+                await context.bot.send_message(chat_id=target, text=text)
+                success_count += 1
+            except Exception:
+                fail_count += 1
+
+            await asyncio.sleep(0.05)
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"✅ မက်ဆေ့ခ်ျကို အားလုံးသို့ ပို့ပြီးပါပြီ။\n"
+                 f"📊 အောင်မြင်: {success_count}\n"
+                 f"❌ မအောင်မြင်: {fail_count}"
+        )
+
+    except Exception as e:
         await context.bot.send_message(
             chat_id=chat_id,
             text=f"❌ အမှားရှိသည်: {e}"
