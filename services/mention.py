@@ -65,7 +65,7 @@ async def send_mentions(
     context,
     chat_id: int,
     members: List[Dict],
-    delay: float = 1.5,  # 改为 1.5 秒
+    delay: float = 1.5,
     stop_flag: dict = None
 ) -> Dict[str, int]:
     """分批发送 @ 消息（支持立即停止）"""
@@ -97,7 +97,7 @@ async def send_mentions(
     logger.info(f"[Announcement] Total {len(batch_data)} batches, {len(members)} members")
 
     for data in batch_data:
-        # 检查停止标志
+        # ✅ 每批发送前检查停止标志
         if stop_flag is not None and not stop_flag.get(chat_key, False):
             logger.info(f"[Announcement] Stopped by user at batch {data['batch_num']}")
             break
@@ -108,9 +108,13 @@ async def send_mentions(
             data["html"]
         )
 
-        # 重试逻辑（最多 3 次）
         max_retries = 3
         for attempt in range(max_retries):
+            # ✅ 重试前也检查停止标志
+            if stop_flag is not None and not stop_flag.get(chat_key, False):
+                logger.info(f"[Announcement] Stopped during retry at batch {data['batch_num']}")
+                return stats
+
             try:
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -139,7 +143,7 @@ async def send_mentions(
                     logger.error(f"[Announcement] Batch {data['batch_num']} failed: {e}")
                     break
 
-        # 可中断的睡眠（每0.2秒检查一次停止标志）
+        # ✅ 睡眠期间也检查停止标志
         if delay > 0:
             sleep_steps = int(delay / 0.2)
             for _ in range(sleep_steps):
